@@ -1,0 +1,15 @@
+# Donnees : ne jamais pousser sur GitHub (on garde seulement les .gitkeep)
+data/**
+!data/**/
+!data/**/.gitkeep
+
+# Cles et secrets
+.env
+*.key
+secrets.*
+
+# Divers
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+.DS_Store
