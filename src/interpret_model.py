@@ -86,7 +86,7 @@ def main():
     names = np.array(ebm.term_names_); rows = []
     for k, lid in enumerate(sel_ids):
         order = np.argsort(-contrib[k])[:3]
-        txt = "; ".join(f"{names[j]} = {sel.iloc[k][names[j].split(' & ')[0]]}" for j in order if contrib[k][j] > 0)
+        txt = "; ".join(" & ".join(f"{v} = {sel.iloc[k][v]}" for v in names[j].split(" & ")) for j in order if contrib[k][j] > 0)
         rows.append({"loan_id": lid, "facteurs_risque": txt or "aucun facteur augmentant nettement le risque",
                      **{f"contrib_{names[j]}": float(contrib[k][j]) for j in np.argsort(-np.abs(contrib[k]))[:5]}})
     pd.DataFrame(rows).to_csv(ROOT / "data/processed/explications_projets.csv", index=False)

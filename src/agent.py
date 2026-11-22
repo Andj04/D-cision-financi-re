@@ -52,8 +52,8 @@ def build_facts(row: dict) -> dict[str, str]:
         "esg_score": f"{row['esg_score']:.0f}",
         "emplois_par_million": f"{row['emplois_par_million']:.1f}",
         "montant_pret": f"{_fmt(row['montant_pret'], 0)} $",
-        "fragilite": row.get("fragilite_texte", "non évaluée"),
-        "motif_ecarte": row.get("motif_ecarte") or "aucun",
+        "fragilite": row["fragilite_texte"] if isinstance(row.get("fragilite_texte"), str) else "non évaluée",
+        "motif_ecarte": row["motif_ecarte"] if isinstance(row.get("motif_ecarte"), str) and row["motif_ecarte"] else "aucun",
         "facteurs_risque": row.get("facteurs_risque", "non disponibles"),
     }
     return {k: str(v) for k, v in f.items()}
