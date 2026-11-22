@@ -13,3 +13,7 @@ __pycache__/
 .ipynb_checkpoints/
 .venv/
 .DS_Store
+
+# Exceptions : petits artefacts versionnés (audit, prédictions, tables de scores, paramètres)
+!data/processed/*.csv
+!data/processed/*.json

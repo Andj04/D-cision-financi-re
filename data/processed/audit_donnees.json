@@ -1,0 +1,52 @@
+{
+  "lignes_brutes": 1236084,
+  "statuts_bruts": {
+    "P I F": 858229,
+    "CHGOFF": 178800,
+    "CANCLD": 149017,
+    "EXEMPT": 49949,
+    "autre (ligne décalée / valeur parasite)": 47,
+    "COMMIT": 42
+  },
+  "ecriture_PIF_variantes": [
+    "P I F"
+  ],
+  "lignes_statut_invalide_retirees": 47,
+  "doublons_exacts_retires": 1414,
+  "sans_FirstDisbursementDate_total": 149575,
+  "sans_FirstDisbursementDate_par_statut": {
+    "CANCLD": 147990,
+    "P I F": 1428,
+    "CHGOFF": 114,
+    "COMMIT": 42,
+    "EXEMPT": 1
+  },
+  "retires_statut_non_resolu": {
+    "EXEMPT": 49929
+  },
+  "date_du_fichier": "2026-09-30",
+  "retires_moins_de_60_mois": 122,
+  "defauts_status_chgoff_apres_60m_comptes_zero": 66652,
+  "id_haches_en_double_retires": 2426,
+  "retires_hors_2000_2016": 122538,
+  "blocs": {
+    "train": {
+      "annees": "2000-2012",
+      "lignes": 723663,
+      "taux_defaut": 0.1348,
+      "defauts": 97535
+    },
+    "val": {
+      "annees": "2013-2014",
+      "lignes": 82384,
+      "taux_defaut": 0.0357,
+      "defauts": 2939
+    },
+    "test": {
+      "annees": "2015-2016",
+      "lignes": 103986,
+      "taux_defaut": 0.0425,
+      "defauts": 4415
+    }
+  }
+}
