@@ -17,3 +17,7 @@ __pycache__/
 # Exceptions : petits artefacts versionnés (audit, prédictions, tables de scores, paramètres)
 !data/processed/*.csv
 !data/processed/*.json
+!models/
+!models/*.joblib
+!reports/
+!params/

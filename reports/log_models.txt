@@ -1,0 +1,28 @@
+train (723663, 14) défaut 0.1348 | val (82384, 14) défaut 0.0357
+logreg fit 36s
+C:\Users\mathi\AppData\Local\Programs\Python\Python313\Lib\site-packages\interpret\glassbox\_ebm\_ebm.py:871: UserWarning: Missing values detected. Our visualizations do not currently display missing values. To retain the glassbox nature of the model you need to either set the missing values to an extreme value like -1000 that will be visible on the graphs, or manually examine the missing value score in ebm.term_scores_[term_index][0]
+  warn(
+Traceback (most recent call last):
+  File "C:\Users\mathi\AppData\Local\Programs\Python\Python313\Lib\site-packages\joblib\externals\loky\backend\resource_tracker.py", line 281, in main
+    registry[rtype][name] -= 1
+    ~~~~~~~~~~~~~~~^^^^^^
+KeyError: 'C:\\Users\\mathi\\AppData\\Local\\Temp\\joblib_memmapping_folder_94552_4c88612210784d049a748b49c95ca9e7_ef9f8a45668747469ddeaab58d020d16\\94552-2140844009056-3cd0de939b104e63950d3ef70320bb08.pkl'
+Traceback (most recent call last):
+  File "C:\Users\mathi\AppData\Local\Programs\Python\Python313\Lib\site-packages\joblib\externals\loky\backend\resource_tracker.py", line 281, in main
+    registry[rtype][name] -= 1
+    ~~~~~~~~~~~~~~~^^^^^^
+KeyError: 'C:\\Users\\mathi\\AppData\\Local\\Temp\\joblib_memmapping_folder_94552_4c88612210784d049a748b49c95ca9e7_ef9f8a45668747469ddeaab58d020d16\\94552-2140844009056-45d8c1614206447b895be87bf63148b7.pkl'
+EBM fit 207s
+                 AUROC   AUPRC      F1   Brier  taux_defaut_reel  pd_moyenne  seuil_F1
+modele version                                                                        
+logreg brut     0.7233  0.1345  0.2096  0.0330            0.0357      0.0431    0.1705
+       calibre  0.7207  0.1305  0.2073  0.0327            0.0357      0.0357    0.1290
+ebm    brut     0.7581  0.1369  0.2227  0.0327            0.0357      0.0388    0.1552
+       calibre  0.7560  0.1332  0.2217  0.0326            0.0357      0.0357    0.1192
+modèle retenu (Brier calibré le plus bas sur validation): ebm
+                 AUROC   AUPRC      F1   Brier  taux_defaut_reel  pd_moyenne  seuil_F1
+modele version                                                                        
+logreg brut     0.7153  0.1579  0.2365  0.0385            0.0425      0.0441    0.1705
+       calibre  0.7150  0.1503  0.2336  0.0383            0.0425      0.0366    0.1290
+ebm    brut     0.7631  0.1746  0.2529  0.0379            0.0425      0.0382    0.1552
+       calibre  0.7626  0.1649  0.2529  0.0380            0.0425      0.0354    0.1192

@@ -1,0 +1,9 @@
+,pd_ml,dscr_min,van,couverture_garanties,dette_fonds_propres,delai_recuperation,esg_score,emplois_par_million
+pd_ml,1.0,1.0,2.0,3.0,3.0,3.0,4.0,5.0
+dscr_min,1.0,1.0,1.0,2.0,2.0,3.0,3.0,4.0
+van,0.5,1.0,1.0,2.0,2.0,2.0,2.0,3.0
+couverture_garanties,0.3333333333333333,0.5,0.5,1.0,1.0,1.0,2.0,2.0
+dette_fonds_propres,0.3333333333333333,0.5,0.5,1.0,1.0,1.0,2.0,2.0
+delai_recuperation,0.3333333333333333,0.3333333333333333,0.5,1.0,1.0,1.0,1.0,2.0
+esg_score,0.25,0.3333333333333333,0.5,0.5,0.5,1.0,1.0,1.0
+emplois_par_million,0.2,0.25,0.3333333333333333,0.5,0.5,0.5,1.0,1.0

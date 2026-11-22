@@ -20,12 +20,12 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 TARGET = "default_60m"
 ID_COL = "loan_id"
 
-NUMERIC = ["log_montant", "part_garantie", "duree_mois", "taux_initial", "taux_manquant"]
-CATEGORICAL = ["taux_fixe_variable", "ligne_renouvelable", "secteur_naics2", "etat", "type_entreprise",
+NUMERIC = ["log_montant", "part_garantie", "taux_initial", "taux_manquant"]
+CATEGORICAL = ["duree_classe", "taux_fixe_variable", "ligne_renouvelable", "secteur_naics2", "etat", "type_entreprise",
                "age_entreprise", "franchise", "procedure", "garantie_reelle"]
 FEATURES = NUMERIC + CATEGORICAL
 FORBIDDEN = {"JobsSupported", "LoanStatus", "ChargeOffDate", "PaidInFullDate", "GrossChargeOffAmount",
-             "default_60m", "ApprovalFY"}
+             "default_60m", "ApprovalFY", "TermInMonths"}
 
 
 def make_features(df: pd.DataFrame) -> pd.DataFrame:
@@ -34,7 +34,11 @@ def make_features(df: pd.DataFrame) -> pd.DataFrame:
     approval = df["GrossApproval"].astype(float)
     out["log_montant"] = np.log1p(approval)
     out["part_garantie"] = (df["SBAGuaranteedApproval"].astype(float) / approval).clip(0, 1)
-    out["duree_mois"] = df["TermInMonths"].astype(float)
+    # FUITE DÉTECTÉE : TermInMonths exact est altéré après l'octroi pour les prêts en défaut (durées non rondes
+    # ~60 % de défaut, durées rondes 12/24/36/60/84/120 ~0-13 %, AUROC 0,96 avec la durée fine contre 0,79 en
+    # tranches et 0,67 sans durée). On ne garde que 3 tranches larges (<=60, 61-120, >120 mois).
+    out["duree_classe"] = pd.cut(df["TermInMonths"].astype(float), [-1, 60, 120, 10_000],
+                                 labels=["<=60 mois", "61-120 mois", ">120 mois"]).astype(str)
     rate = pd.to_numeric(df["InitialInterestRate"], errors="coerce")
     out["taux_initial"] = rate
     out["taux_manquant"] = rate.isna().astype(float)
@@ -48,7 +52,7 @@ def make_features(df: pd.DataFrame) -> pd.DataFrame:
     out["franchise"] = np.where(df["FranchiseCode"].notna(), "oui", "non")
     out["procedure"] = df["ProcessingMethod"].astype("object").fillna("inconnu")
     out["garantie_reelle"] = df["CollateralInd"].astype("object").fillna("inconnu")
-    assert not FORBIDDEN & set(out.columns)
+    assert not FORBIDDEN & set(out.columns)  # durée fine interdite : voir ci-dessus
     return out[FEATURES]
 
 

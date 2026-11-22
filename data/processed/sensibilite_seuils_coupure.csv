@@ -1,0 +1,11 @@
+parametre,valeur,spearman_vs_base,kendall_vs_base,projets_categorie_change
+seuils q/p/v,3%/15%/40%,0.9802052785923753,0.8830645161290324,13
+seuils q/p/v,5%/20%/50%,1.0,1.0,0
+seuils q/p/v,10%/30%/60%,0.9395161290322579,0.8024193548387097,9
+seuils q/p/v,5%/20%/80%,0.9772727272727272,0.8870967741935486,12
+coupure lambda,0.5,1.0,1.0,0
+coupure lambda,0.6,1.0,1.0,0
+coupure lambda,0.7,1.0,1.0,4
+coupure lambda,0.8,1.0,1.0,8
+coupure lambda,0.9,1.0,1.0,16
+coupure lambda,1,1.0,1.0,24
