@@ -61,6 +61,8 @@ def main():
     ecart = (res["rang_distillation_descendante"] - res["rang_distillation_ascendante"]).abs()
     res["ecart_distillations"] = ecart
     res["position_ambigue"] = ecart >= 0.2 * len(alive)
+    names = pd.read_csv(OUT / "simulation_detail.csv").set_index("loan_id")["nom_projet"]
+    res.insert(1, "nom_projet", res["loan_id"].map(names))
     res.to_csv(OUT / "mcda_resultats.csv", index=False)
     sens["seuils_et_coupure"].to_csv(OUT / "sensibilite_seuils_coupure.csv", index=False)
     sens["comparaison_methodes"].to_csv(OUT / "comparaison_methodes.csv", index=False)

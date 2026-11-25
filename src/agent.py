@@ -17,7 +17,8 @@ import re
 import urllib.error
 import urllib.request
 
-DEFAULT_MODELS = {"gemini": "gemini-2.5-flash", "groq": "llama-3.3-70b-versatile"}
+# « gemini-flash-latest » : alias Google qui suit le dernier modèle Flash (les noms datés sont retirés au fil du temps)
+DEFAULT_MODELS = {"gemini": "gemini-flash-latest", "groq": "llama-3.3-70b-versatile"}
 
 SYSTEM_PROMPT = (
     "Tu es l'agent rédacteur d'un comité d'investissement bancaire. Tu rédiges en français une note courte "
@@ -25,7 +26,9 @@ SYSTEM_PROMPT = (
     "chiffres EXACTEMENT comme dans la liste FAITS, sans en créer, arrondir ou déduire d'autres ; "
     "(3) tu n'inventes aucun fait absent de la liste ; (4) tu indiques la catégorie, les raisons principales, "
     "les critères éliminatoires déclenchés s'il y en a, et la fragilité de la décision ; (5) tu rappelles que la "
-    "décision finale revient au comité ; (6) pas de recommandation d'achat/vente, pas de promesse de rendement."
+    "décision finale revient au comité ; (6) pas de recommandation d'achat/vente, pas de promesse de rendement ; "
+    "(7) écris en français naturel : n'emploie jamais les noms techniques des clés (ex. « rang_electre3 », "
+    "« motif_ecarte »), désigne le projet par son nom et n'écris pas son identifiant."
 )
 
 
@@ -34,33 +37,64 @@ def _fmt(x: float, nd: int = 2) -> str:
     return f"{x:,.{nd}f}".replace(",", " ")
 
 
-def build_facts(row: dict) -> dict[str, str]:
-    """Convertit une ligne de résultats en chaînes de faits (les seuls nombres autorisés dans la note)."""
-    f = {
-        "projet": str(row["loan_id"]),
-        "secteur": str(row.get("secteur_damodaran", "inconnu")),
-        "etat": str(row.get("etat", "inconnu")),
-        "categorie": str(row["categorie_finale"]),
-        "rang_electre3": "non classé (écarté)" if row.get("ecarte") else str(int(row["rang_electre3"])),
-        "rang_promethee2": "non classé (écarté)" if row.get("ecarte") else str(int(row["rang_promethee2"])),
-        "probabilite_defaut": f"{100 * row['pd_ml']:.1f} %",
-        "van": f"{_fmt(row['van'], 0)} $",
-        "delai_recuperation": f"{row['delai_recuperation']:.1f} ans",
-        "dscr_min": f"{row['dscr_min']:.2f}",
-        "dette_fonds_propres": f"{row['dette_fonds_propres']:.2f}",
-        "couverture_garanties": f"{row['couverture_garanties']:.2f}",
-        "esg_score": f"{row['esg_score']:.0f}",
-        "emplois_par_million": f"{row['emplois_par_million']:.1f}",
-        "montant_pret": f"{_fmt(row['montant_pret'], 0)} $",
-        "fragilite": row["fragilite_texte"] if isinstance(row.get("fragilite_texte"), str) else "non évaluée",
-        "motif_ecarte": row["motif_ecarte"] if isinstance(row.get("motif_ecarte"), str) and row["motif_ecarte"] else "aucun",
-        "facteurs_risque": row.get("facteurs_risque", "non disponibles"),
-    }
+def _demo_criteria() -> list[dict]:
+    from engine import DEMO_LABELS
+    return [{"colonne": c, "libelle": lab, "format": f} for c, (lab, f) in DEMO_LABELS.items()]
+
+
+def _text(v) -> str | None:
+    return v if isinstance(v, str) and v and v.lower() != "nan" else None
+
+
+def build_facts(row: dict, criteria: list[dict] | None = None) -> dict[str, str]:
+    """Convertit une ligne de résultats en chaînes de faits (les seuls nombres autorisés dans la note).
+    criteria : liste {colonne, libelle, format} de la configuration (par défaut : les 8 critères du projet)."""
+    from engine import fmt
+    criteria = criteria or _demo_criteria()
+    ecarte = bool(row.get("ecarte"))
+    f = {"projet": _text(row.get("nom")) or str(row.get("id", row.get("loan_id", "?"))),
+         "identifiant": str(row.get("id", row.get("loan_id", "?")))}
+    for k in ("secteur", "secteur_damodaran", "etat"):
+        if _text(row.get(k)):
+            f["secteur" if k.startswith("secteur") else k] = row[k]
+    if row.get("montant_pret") is not None and not pd_isna(row.get("montant_pret")):
+        f["montant_pret"] = fmt(row["montant_pret"], "money")
+    f["categorie"] = str(row["categorie_finale"])
+    f["rang_electre3"] = "non classé (écarté)" if ecarte else str(int(row["rang_electre3"]))
+    f["rang_promethee2"] = "non classé (écarté)" if ecarte else str(int(row["rang_promethee2"]))
+    for c in criteria:
+        f[c["colonne"]] = f"{c['libelle']} : {fmt(row[c['colonne']], c.get('format', 'dec2'))}"
+    f["motif_ecarte"] = _text(row.get("motif_ecarte")) or "aucun"
+    f["fragilite"] = _text(row.get("fragilite_texte")) or "non évaluée"
+    if _text(row.get("facteurs_risque")):
+        f["facteurs_risque"] = row["facteurs_risque"]
+    if row.get("part_graines_meme_categorie") is not None and not pd_isna(row.get("part_graines_meme_categorie")):
+        f["stabilite_simulation"] = f"{100 * row['part_graines_meme_categorie']:.0f} % des tirages simulés donnent la même catégorie"
     return {k: str(v) for k, v in f.items()}
 
 
+def pd_isna(v) -> bool:
+    try:
+        return v != v  # NaN
+    except Exception:
+        return False
+
+
+FACT_LABELS = {"projet": "Projet", "secteur": "Secteur", "etat": "État", "montant_pret": "Montant du prêt",
+               "categorie": "Catégorie proposée par le MCDA", "rang_electre3": "Rang ELECTRE III",
+               "rang_promethee2": "Rang PROMETHEE II", "motif_ecarte": "Critère éliminatoire déclenché",
+               "fragilite": "Fragilité de la décision", "facteurs_risque": "Facteurs de risque du modèle",
+               "stabilite_simulation": "Sensibilité à la simulation"}
+
+
 def facts_to_text(facts: dict[str, str]) -> str:
-    return "\n".join(f"- {k} : {v}" for k, v in facts.items())
+    """Faits présentés au LLM avec des libellés français (les critères sont déjà « libellé : valeur »)."""
+    lines = []
+    for k, v in facts.items():
+        if k == "identifiant":
+            continue
+        lines.append(f"- {FACT_LABELS[k]} : {v}" if k in FACT_LABELS else f"- {v}")
+    return "\n".join(lines)
 
 
 # --------------------------------------------------------------------------------------- vérification
@@ -68,7 +102,10 @@ _NUM = re.compile(r"\d+(?:[.,]\d+)?")
 
 
 def _numbers(text: str) -> set[str]:
-    return {m.replace(",", ".") for m in _NUM.findall(text.replace(" ", " ").replace(" ", " "))}
+    # « 10 601 » (espace, espace insécable ou fine) ou « 10,601 » : séparateurs de milliers retirés
+    t = re.sub(r"(?<=\d)[\s  ](?=\d{3}(?!\d))", "", str(text))
+    t = re.sub(r"(?<=\d),(?=\d{3}(?!\d))", "", t)
+    return {m.replace(",", ".") for m in _NUM.findall(t)}
 
 
 def verify_note(note: str, facts: dict[str, str]) -> tuple[bool, list[str]]:
@@ -84,19 +121,26 @@ def verify_note(note: str, facts: dict[str, str]) -> tuple[bool, list[str]]:
 
 
 # --------------------------------------------------------------------------------------- gabarit (sans LLM)
+FIXED_KEYS = {"projet", "identifiant", "secteur", "etat", "montant_pret", "categorie", "rang_electre3",
+              "rang_promethee2", "motif_ecarte", "fragilite", "facteurs_risque", "stabilite_simulation"}
+
+
 def template_note(facts: dict[str, str]) -> str:
+    """Note déterministe (sans LLM) : ne contient que les faits."""
     f = facts
-    lines = [f"Projet {f['projet']} ({f['secteur']}, {f['etat']}) : catégorie « {f['categorie']} ».",
-             f"Probabilité de défaut estimée par le modèle : {f['probabilite_defaut']} ; DSCR minimum {f['dscr_min']} ; "
-             f"VAN {f['van']} ; délai de récupération {f['delai_recuperation']}.",
-             f"Dette sur fonds propres {f['dette_fonds_propres']} ; couverture par les garanties {f['couverture_garanties']} ; "
-             f"score ESG {f['esg_score']} ; {f['emplois_par_million']} emplois par million de dollars investi."]
+    ctx = ", ".join(f[k] for k in ("secteur", "etat") if k in f)
+    lines = [f"{f['projet']}{f' ({ctx})' if ctx else ''} : catégorie « {f['categorie']} »."]
+    crit = [v for k, v in f.items() if k not in FIXED_KEYS]
+    lines.append("Critères : " + " ; ".join(crit) + ".")
     if f["motif_ecarte"] != "aucun":
         lines.append(f"Critère éliminatoire déclenché : {f['motif_ecarte']}.")
     else:
         lines.append(f"Rang ELECTRE III : {f['rang_electre3']} ; rang PROMETHEE II : {f['rang_promethee2']}.")
-    lines.append(f"Principaux facteurs de risque (modèle) : {f['facteurs_risque']}.")
+    if "facteurs_risque" in f:
+        lines.append(f"Principaux facteurs de risque (modèle) : {f['facteurs_risque']}.")
     lines.append(f"Fragilité de la décision : {f['fragilite']}.")
+    if "stabilite_simulation" in f:
+        lines.append(f"Sensibilité à la simulation : {f['stabilite_simulation']}.")
     lines.append("Cette note est une aide à la décision ; la décision finale revient au comité d'investissement.")
     return " ".join(lines)
 
@@ -115,8 +159,57 @@ def _secret(name: str) -> str | None:
 
 def _post(url: str, payload: dict, headers: dict) -> dict:
     req = urllib.request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=40) as r:
+    with urllib.request.urlopen(req, timeout=60) as r:
         return json.loads(r.read().decode("utf-8"))
+
+
+# Le niveau gratuit renvoie souvent 503 (forte demande) ou 429 (quota) ; un modèle peut aussi être retiré (404).
+GEMINI_FALLBACKS = ["gemini-flash-latest", "gemini-flash-lite-latest"]
+RETRYABLE = {404, 429, 500, 503}
+_DISCOVERED: list[str] | None = None
+
+
+def _discover_gemini(key: str) -> list[str]:
+    """Modèles « gemini-X.Y-flash(-lite) » réellement ouverts à cette clé, du plus récent au plus ancien."""
+    global _DISCOVERED
+    if _DISCOVERED is None:
+        try:
+            req = urllib.request.Request("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200",
+                                         headers={"x-goog-api-key": key})
+            with urllib.request.urlopen(req, timeout=15) as r:
+                models = json.loads(r.read().decode("utf-8")).get("models", [])
+            names = [m["name"].split("/")[-1] for m in models
+                     if "generateContent" in m.get("supportedGenerationMethods", [])]
+            names = [n for n in names if re.fullmatch(r"gemini-\d+(\.\d+)?-flash(-lite)?", n)]
+            _DISCOVERED = sorted(names, key=lambda n: ([int(x) for x in re.findall(r"\d+", n)], "lite" not in n),
+                                 reverse=True)[:4]
+        except Exception:
+            _DISCOVERED = []
+    return _DISCOVERED
+
+
+def gemini_models() -> list[str]:
+    first = _secret("LLM_MODEL")
+    key = _secret("GEMINI_API_KEY") or ""
+    return list(dict.fromkeys(([first] if first else []) + GEMINI_FALLBACKS + _discover_gemini(key)))
+
+
+def with_fallback(run, models: list[str]):
+    """Exécute run(model) sur chaque modèle tant que l'erreur est passagère (503, 429, 404, délai dépassé).
+    Renvoie (résultat, modèle utilisé) ou relève la dernière erreur."""
+    last = None
+    for m in models:
+        try:
+            return run(m), m
+        except urllib.error.HTTPError as e:
+            if e.code not in RETRYABLE:
+                raise
+            last = e
+        except (TimeoutError, urllib.error.URLError) as e:
+            if isinstance(e, urllib.error.HTTPError):
+                raise
+            last = e
+    raise last
 
 
 def call_llm(prompt: str, system: str = SYSTEM_PROMPT) -> tuple[str | None, str]:
@@ -128,13 +221,15 @@ def call_llm(prompt: str, system: str = SYSTEM_PROMPT) -> tuple[str | None, str]
             key = _secret("GEMINI_API_KEY")
             if not key:
                 return None, "pas de clé GEMINI_API_KEY dans les secrets"
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-            out = _post(url, {"system_instruction": {"parts": [{"text": system}]},
-                              "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                              # budget large : les modèles « 2.5 » consomment aussi des jetons de réflexion
-                              "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048}},
-                        {"Content-Type": "application/json", "x-goog-api-key": key})
-            parts = out["candidates"][0]["content"].get("parts", [])
+            def run(m):
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+                return _post(url, {"system_instruction": {"parts": [{"text": system}]},
+                                   "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+                                   # budget large : les modèles récents consomment aussi des jetons de réflexion
+                                   "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4096}},
+                             {"Content-Type": "application/json", "x-goog-api-key": key})
+            out, model = with_fallback(run, gemini_models())
+            parts = [p for p in out["candidates"][0]["content"].get("parts", []) if not p.get("thought")]
             text = "".join(p.get("text", "") for p in parts).strip()
             return (text or None), (f"Gemini {model}" if text else f"réponse vide de Gemini {model}")
         if provider == "groq":
@@ -159,9 +254,9 @@ def call_llm(prompt: str, system: str = SYSTEM_PROMPT) -> tuple[str | None, str]
         return None, f"réponse inattendue du fournisseur ({type(e).__name__})"
 
 
-def write_note(row: dict) -> dict:
+def write_note(row: dict, criteria: list[dict] | None = None) -> dict:
     """Note pour un projet : LLM si disponible ET vérifiée, sinon gabarit. Renvoie texte, source, contrôle."""
-    facts = build_facts(row)
+    facts = build_facts(row, criteria)
     prompt = "FAITS (à recopier tels quels, aucun autre chiffre autorisé) :\n" + facts_to_text(facts)
     llm, diag = call_llm(prompt)
     if llm:

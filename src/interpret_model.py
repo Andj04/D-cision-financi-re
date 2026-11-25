@@ -20,6 +20,24 @@ REP = ROOT / "reports"
 rng = np.random.default_rng(0)
 
 
+VAR_FR = {"duree_classe": "durée du prêt", "etat": "État", "age_entreprise": "âge de l'entreprise",
+          "taux_initial": "taux d'intérêt initial", "procedure": "procédure SBA", "type_entreprise": "type d'entreprise",
+          "ligne_renouvelable": "ligne renouvelable", "secteur_naics2": "secteur NAICS", "franchise": "franchise",
+          "taux_fixe_variable": "taux fixe ou variable", "part_garantie": "part garantie par la SBA",
+          "taux_manquant": "taux non renseigné", "log_montant": "montant"}
+
+
+def readable(var: str, x) -> str:
+    """« log_montant = 11.73 » -> « montant ≈ 125 000 $ » ; noms de variables en français."""
+    if var == "log_montant":
+        return f"montant ≈ {np.expm1(float(x)):,.0f} $".replace(",", " ")
+    if var == "part_garantie":
+        return f"part garantie par la SBA = {100 * float(x):.0f} %"
+    if var == "taux_initial":
+        return f"taux d'intérêt initial = {float(x):.2f} %"
+    return f"{VAR_FR.get(var, var)} = {x}"
+
+
 def permutation_importance(predict, X, y, n_repeats=5, max_rows=30000):
     idx = rng.choice(len(X), size=min(max_rows, len(X)), replace=False)
     X, y = X.iloc[idx].reset_index(drop=True), y[idx]
@@ -91,7 +109,7 @@ def main():
     names = np.array(ebm.term_names_); rows = []
     for k, lid in enumerate(sel_ids):
         order = np.argsort(-contrib[k])[:3]
-        txt = "; ".join(" & ".join(f"{v} = {sel.iloc[k][v]}" for v in names[j].split(" & ")) for j in order if contrib[k][j] > 0)
+        txt = "; ".join(" & ".join(readable(v, sel.iloc[k][v]) for v in names[j].split(" & ")) for j in order if contrib[k][j] > 0)
         rows.append({"loan_id": lid, "facteurs_risque": txt or "aucun facteur augmentant nettement le risque",
                      **{f"contrib_{names[j]}": float(contrib[k][j]) for j in np.argsort(-np.abs(contrib[k]))[:5]}})
     pd.DataFrame(rows).to_csv(ROOT / "data/processed/explications_projets.csv", index=False)

@@ -11,13 +11,14 @@ Projet de machine learning de groupe dans le secteur bancaire. La banque est le 
 | `data/raw/` | Données brutes téléchargées, jamais modifiées (fichiers FOIA SBA 7(a)). Non versionné. |
 | `data/external/` | Paramètres externes (Damodaran `wacc.xlsx`). Non versionné. |
 | `data/processed/` | Jeux train/val/test (non versionnés, lourds) et **petits artefacts versionnés** (CSV/JSON : audit, prédictions, `project_scores.csv`, résultats MCDA, sensibilités). |
-| `src/` | Code : `data_prep.py`, `features.py`, `models.py`, `interpret_model.py`, `export_pd.py`, `simulate.py`, `project_scores.py`, `mcda.py`, `run_mcda.py`, `sensibilite_simulation.py`, `agent.py`, `damodaran.py`. |
+| `src/` | Pipeline : `data_prep.py`, `features.py`, `models.py`, `interpret_model.py`, `export_pd.py`, `simulate.py`, `project_scores.py`, `run_mcda.py`, `sensibilite_simulation.py`, `damodaran.py`. Outil réutilisable : `mcda.py` (méthodes), `engine.py` (configuration et évaluation de n'importe quel jeu), `evaluer.py` (ligne de commande). IA générative : `agent.py` (note par projet), `advisor.py` (conseiller conversationnel). `naming.py` (noms lisibles des projets). |
 | `notebooks/` | `01` audit/exploration, `02` logistique, `03` EBM/comparaison, `04` interprétabilité (lisent les sorties du pipeline). |
-| `app/app.py`, `.streamlit/config.toml` | Application Streamlit et son thème. |
+| `app/` , `.streamlit/config.toml` | Application Streamlit (`app.py` + `common.py` + une page par fichier dans `views/`) et son thème. |
+| `exemples/` | Jeu de 12 PME fictives et sa configuration JSON, pour essayer l'outil sur d'autres données. |
 | `models/` | Modèles entraînés (`risk_models.joblib`). |
 | `reports/` | Métriques, réglage des hyperparamètres, graphiques (calibration, importances, effets EBM), erreurs par segment. |
 | `params/` | Paramètres sectoriels utilisés, **jugements AHP (modifiables)**, matrice et poids AHP, profils ELECTRE TRI, filtre éliminatoire. |
-| `tests/` | `test_mcda.py` (exemple à 3 projets calculé à la main, AHP, filtre, profils), `test_pipeline.py` (garde-fous fuite / double comptage), `check_agent.py` (garde-fou de l'agent). |
+| `tests/` | `test_mcda.py` (exemple à 3 projets calculé à la main, AHP, filtre, profils), `test_pipeline.py` (garde-fous fuite / double comptage), `test_engine.py` (moteur générique, configuration, outils du conseiller, vérificateur, noms), `check_agent.py` (garde-fou de l'agent). |
 | `scripts/download_data.py` | Vérifie la présence des données et indique où les obtenir. |
 
 ## Installation et reproduction
@@ -91,9 +92,35 @@ Le modèle est retenu sur la validation (Brier calibré le plus bas). L'écart d
 
 Le MCDA est vérifié à la main sur un exemple à trois projets (`tests/test_mcda.py`) ; ELECTRE III est implémenté en numpy (pas pyDecision) pour être auditable.
 
-## Agent LLM (étape 9)
+## Noms des projets
 
-`src/agent.py` : le prompt ne contient que des chiffres déjà calculés ; un vérificateur rejette toute note contenant un nombre absent des faits et la remplace par une note de gabarit. **Sans clé, l'application fonctionne avec le gabarit.** Fournisseurs gratuits pris en charge : Google Gemini (`LLM_PROVIDER=gemini`, `GEMINI_API_KEY`, modèle par défaut `gemini-2.5-flash`, modifiable par `LLM_MODEL`) ou Groq (`LLM_PROVIDER=groq`, `GROQ_API_KEY`). La clé se met uniquement dans une variable d'environnement ou dans les secrets Streamlit, jamais dans le dépôt (`.env`, `*.key`, `secrets.*` sont ignorés). En cas d'échec, l'application affiche la cause sous la note (clé absente, erreur HTTP du fournisseur avec son message, réseau), jamais la clé.
+Les 40 projets portent un nom lisible et **fictif** (« Cabinet dentaire Baker », « Brasserie artisanale Garcia ») : l'activité vient du vrai code NAICS du prêt, le nom de famille d'une liste fixe (`src/naming.py`). Les noms réels des emprunteurs ne sont jamais utilisés (retirés dès `data_prep.py`). Le nom n'influence aucun calcul ; l'identifiant haché reste la clé.
+
+## Outil réutilisable : évaluer vos propres projets
+
+Toute la méthode est paramétrable, sans toucher au code, depuis la page **« Configurer l'analyse »** de l'application ou en ligne de commande :
+
+1. **Données** : un fichier CSV ou Excel, une ligne par projet (`id` et `nom` facultatifs, une colonne numérique par critère). Modèle téléchargeable dans l'application ; exemple : `exemples/projets_exemple.csv`. Si le fichier décrit des prêts au format SBA (`GrossApproval`, `TermInMonths`, `NaicsCode`, … : voir `engine.MODEL_COLUMNS`) sans colonne `pd_ml`, la probabilité de défaut est calculée par le modèle de risque entraîné.
+2. **Critères** : colonnes utilisées, libellé, sens (max / min), poids, format d'affichage, profils ELECTRE TRI b1 / b2 (proposés par tertiles, modifiables).
+3. **Pondération** : poids saisis, ou AHP (jugements deux à deux sur l'échelle de Saaty, ratio de cohérence affiché en direct, refus si ≥ 0,10).
+4. **Filtre éliminatoire** : autant de règles « colonne opérateur seuil » que voulu.
+5. **ELECTRE** : seuils q / p / v, coupure λ, calcul ou non des 200 scénarios de robustesse.
+
+La configuration s'enregistre et se recharge en JSON (`exemples/configuration_exemple.json`). Une fois l'analyse lancée, toutes les pages (tableau de bord, fiche projet, conseiller, robustesse) travaillent sur ce jeu. Le moteur (`src/engine.py`) reproduit exactement les résultats du pipeline sur la démonstration (vérifié par `tests/test_engine.py`).
+
+```bash
+python src/evaluer.py exemples/projets_exemple.csv --config exemples/configuration_exemple.json --sortie resultats.csv
+python src/evaluer.py mes_projets.xlsx --ecrire-config ma_config.json   # configuration de départ à éditer
+python src/evaluer.py --demo                                             # les 40 projets de démonstration
+```
+
+## IA générative : agent rédacteur et conseiller (étape 9)
+
+**Agent rédacteur** (`src/agent.py`, page « Fiche projet ») : le prompt ne contient que des chiffres déjà calculés ; un vérificateur rejette toute note contenant un nombre absent des faits et la remplace par une note de gabarit.
+
+**Conseiller IA** (`src/advisor.py`, page « Conseiller IA ») : un mini conseiller financier à qui l'on pose des questions en français sur le jeu de projets, les résultats, des scénarios « et si » et la méthode. Le LLM ne voit pas les données brutes : il appelle des **outils Python déterministes** (vue d'ensemble, liste triée, fiche projet, comparaison, statistiques, scénario de poids / coupure / sans filtre, paramètres de la méthode, données historiques SBA) et reformule leurs sorties. Il ne calcule rien lui-même. Les données consultées sont affichées sous chaque réponse, et un vérificateur signale tout nombre de la réponse absent de ces données. Sans clé, des « questions rapides » interrogent directement les mêmes outils.
+
+**Fournisseurs gratuits** : Google Gemini (`GEMINI_API_KEY`, par défaut) ou Groq (`LLM_PROVIDER=groq`, `GROQ_API_KEY`). Modèle Gemini par défaut : l'alias `gemini-flash-latest` (les noms datés sont retirés au fil du temps : `gemini-2.0-flash` puis `gemini-2.5-flash` ont été fermés aux nouveaux comptes). En cas de saturation (503), de quota (429) ou de modèle retiré (404), l'appel bascule automatiquement sur `gemini-flash-lite-latest` puis sur les modèles Flash ouverts à la clé (liste interrogée auprès de Google). `LLM_MODEL` force un modèle. La clé se met uniquement dans une variable d'environnement ou dans les secrets Streamlit, jamais dans le dépôt (`.env`, `*.key`, `secrets.*` sont ignorés). En cas d'échec, l'application affiche la cause (clé absente, erreur HTTP et message du fournisseur, réseau), jamais la clé. Testé le 25/11/2026 avec une clé Gemini gratuite : notes et réponses du conseiller produites et vérifiées (forte demande fréquente sur le niveau gratuit, d'où les relances).
 
 ## Déploiement (Streamlit Community Cloud)
 

@@ -15,6 +15,7 @@ import pandas as pd
 
 from damodaran import industry_table
 from features import duree_classe
+from naming import human_names
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = 2026                  # graine du tirage des 40 prêts ET (par défaut) des indicateurs simulés
@@ -137,7 +138,11 @@ def simulate(test: pd.DataFrame, pd_ml: pd.Series, seed: int = SEED, n: int = N_
                      "categorie_esg": cls, "van": van, "delai_recuperation": payback, "dscr_min": dscr_min,
                      "dette_fonds_propres": de_ratio, "couverture_garanties": coverage, "esg_score": esg,
                      "emplois_par_million": jobs})
-    return pd.DataFrame(rows).merge(pd_ml.rename("pd_ml"), left_on="loan_id", right_index=True, how="left")
+    out = pd.DataFrame(rows)
+    # nom lisible et fictif (activité réelle NAICS + nom de famille tiré d'une liste fixe) : n'affecte aucun tirage
+    out.insert(1, "nom_projet", human_names(out["loan_id"], sample["NaicsCode"]).values)
+    out.insert(2, "naics", sample["NaicsCode"].astype(str).values)
+    return out.merge(pd_ml.rename("pd_ml"), left_on="loan_id", right_index=True, how="left")
 
 
 if __name__ == "__main__":

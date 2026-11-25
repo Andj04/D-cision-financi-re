@@ -111,8 +111,52 @@ def make_thresholds(perf: np.ndarray, q_pct=0.05, p_pct=0.20, v_pct=0.50) -> Thr
     return Thresholds(q_pct * rng, p_pct * rng, v_pct * rng)
 
 
-def oriented(df: pd.DataFrame) -> np.ndarray:
-    return np.column_stack([SENSE[c] * df[c].to_numpy(float) for c in CRITERIA])
+def oriented(df: pd.DataFrame, sense: dict[str, int] | None = None) -> np.ndarray:
+    """Performances orientées « plus grand = meilleur » ; sense = {critère: +1 (maximiser) | -1 (minimiser)}."""
+    sense = sense or SENSE
+    return np.column_stack([sense[c] * df[c].to_numpy(float) for c in sense])
+
+
+OPS = {"<": np.less, "<=": np.less_equal, ">": np.greater, ">=": np.greater_equal}
+
+
+def apply_rules(scores: pd.DataFrame, rules: list[dict]) -> pd.DataFrame:
+    """Filtre éliminatoire générique : rules = [{"critere": "dscr_min", "operateur": "<", "seuil": 1.0,
+    "libelle": "DSCR minimum < 1"}, ...]. Un projet est écarté si AU MOINS une règle est vraie."""
+    out = scores.copy()
+    motifs = pd.Series([""] * len(out), index=out.index, dtype=object)
+    for r in rules:
+        hit = OPS[r["operateur"]](out[r["critere"]].to_numpy(float), float(r["seuil"]))
+        lab = r.get("libelle") or f"{r['critere']} {r['operateur']} {r['seuil']:g}"
+        motifs[hit] = [m + (" ; " if m else "") + lab for m in motifs[hit]]
+    out["motif_ecarte"] = motifs
+    out["ecarte"] = out["motif_ecarte"] != ""
+    return out
+
+
+def default_rules(reference_rate: float, dscr_floor: float = 1.0, pd_multiple: float = 2.0) -> list[dict]:
+    """Règles du projet (décision 14), exprimées dans le format générique."""
+    return [{"critere": "dscr_min", "operateur": "<", "seuil": dscr_floor, "libelle": f"DSCR minimum < {dscr_floor:g}"},
+            {"critere": "pd_ml", "operateur": ">", "seuil": pd_multiple * reference_rate,
+             "libelle": f"probabilité de défaut > {pd_multiple:g} x taux de référence "
+                        f"({100 * pd_multiple * reference_rate:.1f} %)"}]
+
+
+def profiles_from_table(table: dict[str, tuple[float, float]], sense: dict[str, int]) -> np.ndarray:
+    """Profils {critère: (b1, b2)} en unités d'origine -> tableau orienté 2 x n (b2 forcé à dominer b1)."""
+    prof = np.array([[sense[c] * float(table[c][k]) for c in sense] for k in (0, 1)])
+    prof[1] = np.maximum(prof[1], prof[0])
+    return prof
+
+
+def tertile_profiles(df: pd.DataFrame, sense: dict[str, int]) -> dict[str, tuple[float, float]]:
+    """Profils par défaut pour un nouveau jeu : 33e / 66e centiles (dans le sens de chaque critère)."""
+    out = {}
+    for c, s in sense.items():
+        v = df[c].to_numpy(float)
+        lo, hi = np.quantile(v, 1 / 3), np.quantile(v, 2 / 3)
+        out[c] = (float(lo), float(hi)) if s > 0 else (float(hi), float(lo))
+    return out
 
 
 def credibility(perf: np.ndarray, other: np.ndarray, w: np.ndarray, th: Thresholds) -> np.ndarray:
@@ -272,23 +316,38 @@ class McdaConfig:
     cut: float = 0.6
 
 
-def run_mcda(scores: pd.DataFrame, weights: pd.Series, reference_rate: float,
-             cfg: McdaConfig = McdaConfig(), filter_first: bool = True) -> pd.DataFrame:
-    """Applique filtre -> ELECTRE III + ELECTRE TRI + PROMETHEE II sur les survivants."""
-    df = eliminatory_filter(scores, reference_rate) if filter_first else scores.assign(ecarte=False, motif_ecarte="")
+def run_mcda(scores: pd.DataFrame, weights: pd.Series, reference_rate: float | None = None,
+             cfg: McdaConfig = McdaConfig(), filter_first: bool = True, sense: dict[str, int] | None = None,
+             profiles: dict[str, tuple[float, float]] | None = None, rules: list[dict] | None = None) -> pd.DataFrame:
+    """Applique filtre -> ELECTRE III + ELECTRE TRI + PROMETHEE II sur les survivants.
+
+    Par défaut : critères, sens, filtre et profils du projet (décisions 13 à 16). Pour un autre jeu de projets :
+    passer sense (critères et sens), rules (filtre générique) et profiles ({critère: (b1, b2)})."""
+    sense = sense or SENSE
+    if rules is not None:
+        df = apply_rules(scores, rules)
+    elif filter_first:
+        df = eliminatory_filter(scores, reference_rate)
+    else:
+        df = scores.assign(ecarte=False, motif_ecarte="")
     alive = df[~df["ecarte"]]
-    w = weights.reindex(CRITERIA).to_numpy(float)
-    perf = oriented(alive)
-    th = make_thresholds(perf, cfg.q_pct, cfg.p_pct, cfg.v_pct)
-    e3 = electre_iii(perf, w, th)
-    tri = electre_tri(perf, make_profiles(alive, reference_rate)[0], w, th, cfg.cut)
-    pm = promethee_ii(perf, w, th)
     out = df.copy()
     for col in ["rang_electre3", "rang_distillation_descendante", "rang_distillation_ascendante",
                 "rang_promethee2", "flux_net_promethee", "credibilite_nette"]:
         out[col] = np.nan
     out["categorie_tri_pessimiste"] = pd.Series([None] * len(out), index=out.index, dtype=object)
     out["categorie_tri_optimiste"] = pd.Series([None] * len(out), index=out.index, dtype=object)
+    out.loc[out["ecarte"], ["categorie_tri_pessimiste", "categorie_tri_optimiste"]] = "Refuser"
+    if len(alive) == 0:
+        return out
+    w = weights.reindex(list(sense)).to_numpy(float)
+    perf = oriented(alive, sense)
+    th = make_thresholds(perf, cfg.q_pct, cfg.p_pct, cfg.v_pct)
+    e3 = electre_iii(perf, w, th)
+    prof = (profiles_from_table(profiles, sense) if profiles is not None
+            else make_profiles(alive, reference_rate)[0])
+    tri = electre_tri(perf, prof, w, th, cfg.cut)
+    pm = promethee_ii(perf, w, th) if len(alive) > 1 else {"phi": np.zeros(1), "rank": np.ones(1, dtype=int)}
     out.loc[alive.index, "rang_electre3"] = e3["rank"]
     out.loc[alive.index, "rang_distillation_descendante"] = e3["rank_desc"]
     out.loc[alive.index, "rang_distillation_ascendante"] = e3["rank_asc"]
@@ -307,9 +366,15 @@ LAMBDA_RANGE = (0.5, 0.8)   # coupure plausible pour les scénarios combinés ; 
                             # montré que dans le tableau « un paramètre à la fois », comme cas extrême
 
 
-def sensitivity(scores: pd.DataFrame, weights: pd.Series, reference_rate: float, seed: int = 7,
-                n_weight_draws: int = 200) -> dict[str, pd.DataFrame]:
-    base = run_mcda(scores, weights, reference_rate)
+def sensitivity(scores: pd.DataFrame, weights: pd.Series, reference_rate: float | None = None, seed: int = 7,
+                n_weight_draws: int = 200, cfg: McdaConfig = McdaConfig(), **spec) -> dict[str, pd.DataFrame]:
+    """spec : sense / profiles / rules transmis à run_mcda (jeu de projets quelconque). cfg : configuration de base."""
+    base_cfg = cfg
+
+    def run_mcda_(s, w, ref, c=base_cfg):            # même spécification pour tous les scénarios
+        return run_mcda(s, w, ref, c, **spec)
+
+    base = run_mcda_(scores, weights, reference_rate)
     alive_idx = base.index[~base["ecarte"]]
     base_rank = base.loc[alive_idx, "rang_electre3"]
     base_cat = base["categorie_tri_pessimiste"]
@@ -323,11 +388,12 @@ def sensitivity(scores: pd.DataFrame, weights: pd.Series, reference_rate: float,
     rows = []
     for q, p, v in [(0.03, 0.15, 0.40), (0.05, 0.20, 0.50), (0.10, 0.30, 0.60), (0.05, 0.20, 0.80)]:
         rows.append({"parametre": "seuils q/p/v", "valeur": f"{q:.0%}/{p:.0%}/{v:.0%}",
-                     **compare(run_mcda(scores, weights, reference_rate, McdaConfig(q, p, v, 0.6)))})
+                     **compare(run_mcda_(scores, weights, reference_rate, McdaConfig(q, p, v, base_cfg.cut)))})
     # (b) niveau de coupure lambda
     for cut in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
         rows.append({"parametre": "coupure lambda", "valeur": f"{cut:g}",
-                     **compare(run_mcda(scores, weights, reference_rate, McdaConfig(cut=cut)))})
+                     **compare(run_mcda_(scores, weights, reference_rate,
+                                         McdaConfig(base_cfg.q_pct, base_cfg.p_pct, base_cfg.v_pct, cut)))})
     table = pd.DataFrame(rows)
 
     # (c) scénarios combinés : poids +/-30 %, seuils q/p/v et coupure lambda dans [0,5 ; 0,8]
@@ -337,7 +403,7 @@ def sensitivity(scores: pd.DataFrame, weights: pd.Series, reference_rate: float,
         w = weights * rng.uniform(0.7, 1.3, len(weights))
         cfg = McdaConfig(q_pct=rng.uniform(0.03, 0.10), p_pct=rng.uniform(0.15, 0.30),
                          v_pct=rng.uniform(0.40, 0.80), cut=rng.uniform(*LAMBDA_RANGE))
-        res = run_mcda(scores, w / w.sum(), reference_rate, cfg)
+        res = run_mcda_(scores, w / w.sum(), reference_rate, cfg)
         cats.append(res["categorie_tri_pessimiste"].to_numpy())
         ranks.append(res["rang_electre3"].to_numpy())
     cats, ranks = np.array(cats), np.array(ranks, dtype=float)
@@ -352,10 +418,11 @@ def sensitivity(scores: pd.DataFrame, weights: pd.Series, reference_rate: float,
 
     # comparaison des trois méthodes
     mask = ~base["ecarte"]
+    two = mask.sum() > 2
     meth = pd.DataFrame({
         "paire": ["ELECTRE III vs PROMETHEE II"],
-        "spearman": [spearmanr(base.loc[mask, "rang_electre3"], base.loc[mask, "rang_promethee2"])[0]],
-        "kendall": [kendalltau(base.loc[mask, "rang_electre3"], base.loc[mask, "rang_promethee2"])[0]],
+        "spearman": [spearmanr(base.loc[mask, "rang_electre3"], base.loc[mask, "rang_promethee2"])[0] if two else np.nan],
+        "kendall": [kendalltau(base.loc[mask, "rang_electre3"], base.loc[mask, "rang_promethee2"])[0] if two else np.nan],
     })
     pess_opt = int((base["categorie_tri_pessimiste"] != base["categorie_tri_optimiste"]).sum())
     meth["projets_ou_pessimiste_differe_de_optimiste"] = pess_opt
