@@ -1,6 +1,8 @@
-"""Éléments partagés par les pages : style, couleurs, état de l'analyse active, petits composants."""
+"""Éléments partagés par les pages : identité visuelle (École Centrale Casablanca), état de l'analyse active,
+composants d'interface (en-tête de page, cartes d'indicateurs, titres de section, badges)."""
 from __future__ import annotations
 
+import html
 import json
 import sys
 from pathlib import Path
@@ -9,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
+ASSETS = Path(__file__).resolve().parent / "assets"
 if str(ROOT / "src") not in sys.path:
     sys.path.insert(0, str(ROOT / "src"))
 
@@ -37,44 +40,129 @@ _reload_src_if_changed()
 import engine  # noqa: E402
 
 D, R, P = ROOT / "data/processed", ROOT / "reports", ROOT / "params"
-CAT_COLOR = {"Financer": "#1a7f5a", "Conditionner": "#c98a00", "Refuser": "#b03a2e"}
-CAT_ORDER = ["Financer", "Conditionner", "Refuser"]
 PAGES: dict = {}          # rempli par app.py (objets st.Page, pour st.switch_page)
+
+# ----------------------------------------------------------------------------------------------- identité visuelle
+GREEN, GREEN_DARK, GREEN_LIGHT = "#02987D", "#01715D", "#E3F3EF"
+GREY, GREY_DARK, LINE = "#72777A", "#2B3134", "#E1E6E8"
+CAT_COLOR = {"Financer": GREEN, "Conditionner": "#D39B2A", "Refuser": "#C0503F"}
+CAT_TINT = {"Financer": GREEN_LIGHT, "Conditionner": "#FBF1DD", "Refuser": "#F8E3DF"}
+CAT_ORDER = ["Financer", "Conditionner", "Refuser"]
 CAT_TEXT = {"Financer": "Financer", "Conditionner": "Financer sous conditions", "Refuser": "Refuser"}
 
-CSS = """
+CSS = f"""
 <style>
-.block-container {padding-top: 1.4rem; max-width: 1350px;}
-.hero {background: linear-gradient(120deg, #1f4e79 0%, #2e6f9e 60%, #3f8fb5 100%); color: #fff;
-       padding: 20px 26px; border-radius: 14px; margin-bottom: 16px;}
-.hero h1 {color: #fff; font-size: 1.6rem; margin: 0 0 4px 0; padding: 0;}
-.hero p {margin: 0; opacity: .92;}
-.chips {margin-top: 10px;}
-.chip {display: inline-block; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.35);
-       border-radius: 999px; padding: 3px 12px; margin: 0 6px 6px 0; font-size: .85rem;}
-.badge {display: inline-block; color: #fff; border-radius: 8px; padding: 4px 12px; font-weight: 600; font-size: 1rem;}
-.muted {color: #5b6675; font-size: .9rem;}
-.step {border-left: 4px solid #1f4e79; padding: 6px 12px; margin-bottom: 8px; background: #fff; border-radius: 6px;}
-.stepnum {display:inline-block; background:#1f4e79; color:#fff; border-radius:999px; width:26px; height:26px;
-          text-align:center; line-height:26px; font-weight:700; margin-right:8px;}
-div[data-testid="stMetric"] {background: #fff; border: 1px solid #e3e7ee; border-radius: 12px; padding: 10px 14px;}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+html, body, .stApp, .stApp p, .stApp li, .stApp label, .stApp input, .stApp textarea, .stApp button,
+.stApp h1, .stApp h2, .stApp h3, .stApp h4, .stMarkdown, .stMarkdown span {{
+  font-family: 'Inter', 'Segoe UI', sans-serif; }}
+/* les icônes gardent leur police (sinon leur nom s'affiche en texte : « space_dashboard ») */
+[data-testid="stIconMaterial"], span[class*="material-symbols"], .material-symbols-rounded {{
+  font-family: 'Material Symbols Rounded' !important; }}
+.block-container {{ padding-top: 2.2rem; padding-bottom: 3rem; max-width: 1320px; }}
+.stAppDeployButton, footer {{ display: none !important; }}
+h1, h2, h3, h4 {{ color: {GREY_DARK}; letter-spacing: -0.01em; }}
+
+/* barre latérale */
+section[data-testid="stSidebar"] {{ background: #FFFFFF; border-right: 1px solid {LINE}; }}
+img[data-testid="stSidebarLogo"], [data-testid="stSidebarHeader"] img {{ height: 2.9rem !important; max-width: 100%; }}
+section[data-testid="stSidebar"] [data-testid="stSidebarNavLink"][aria-current="page"] {{
+  background: {GREEN_LIGHT}; border-left: 3px solid {GREEN}; }}
+.side-card {{ background: #F7F9F9; border: 1px solid {LINE}; border-radius: 10px; padding: 12px 14px; font-size: .85rem; }}
+.side-card .t {{ font-size: .7rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: {GREY}; }}
+.side-card .n {{ font-weight: 600; color: {GREY_DARK}; margin: 4px 0 8px; line-height: 1.3; }}
+.side-foot {{ font-size: .74rem; color: {GREY}; line-height: 1.5; }}
+
+/* en-tête de page */
+.page-head {{ display: flex; justify-content: space-between; align-items: flex-end; gap: 16px;
+  border-bottom: 1px solid {LINE}; padding-bottom: 14px; margin-bottom: 20px; }}
+.page-head .eyebrow {{ font-size: .72rem; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: {GREEN}; }}
+.page-head h1 {{ font-size: 1.75rem; font-weight: 700; margin: 2px 0 4px; padding: 0; color: {GREY_DARK}; }}
+.page-head p {{ margin: 0; color: {GREY}; font-size: .95rem; max-width: 820px; }}
+.page-head .rule {{ width: 56px; height: 3px; background: {GREEN}; border-radius: 2px; margin-top: 10px; }}
+.pill {{ display: inline-block; font-size: .75rem; font-weight: 500; color: {GREY_DARK}; background: #FFFFFF;
+  border: 1px solid {LINE}; border-radius: 999px; padding: 3px 10px; margin: 0 6px 6px 0; }}
+.pill b {{ color: {GREEN}; font-weight: 700; margin-right: 4px; }}
+
+/* cartes d'indicateurs */
+.kpi-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 2px 0 20px; }}
+.kpi {{ background: #FFFFFF; border: 1px solid {LINE}; border-radius: 10px; padding: 14px 16px 12px;
+  border-top: 3px solid var(--accent, {GREEN}); box-shadow: 0 1px 2px rgba(16,24,40,.04); }}
+.kpi .l {{ font-size: .72rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: {GREY}; }}
+.kpi .v {{ font-size: 1.65rem; font-weight: 700; color: {GREY_DARK}; line-height: 1.25; margin-top: 4px; }}
+.kpi .s {{ font-size: .78rem; color: {GREY}; margin-top: 2px; }}
+
+/* titres de section, cartes */
+.sec {{ font-size: 1.02rem; font-weight: 600; color: {GREY_DARK}; border-left: 3px solid {GREEN};
+  padding-left: 10px; margin: 22px 0 10px; }}
+.sec small {{ font-weight: 400; color: {GREY}; margin-left: 6px; }}
+.muted {{ color: {GREY}; font-size: .88rem; }}
+.badge {{ display: inline-block; border-radius: 999px; padding: 4px 12px; font-weight: 600; font-size: .85rem;
+  border: 1px solid currentColor; vertical-align: middle; }}
+.step {{ background: #FFFFFF; border: 1px solid {LINE}; border-left: 3px solid {GREEN}; border-radius: 8px;
+  padding: 10px 14px; margin-bottom: 8px; }}
+.step b {{ color: {GREY_DARK}; }}
+.stepnum {{ display: inline-block; background: {GREEN}; color: #fff; border-radius: 999px; width: 26px; height: 26px;
+  text-align: center; line-height: 26px; font-weight: 700; margin-right: 10px; font-size: .85rem; }}
+.tag {{ display: inline-block; font-size: .74rem; border-radius: 6px; padding: 2px 8px; margin-right: 6px; }}
+.tag.ok {{ background: {GREEN_LIGHT}; color: {GREEN_DARK}; }}
+.tag.warn {{ background: #FBF1DD; color: #8A5D00; }}
+.tag.info {{ background: #EEF1F2; color: {GREY_DARK}; }}
+
+/* composants Streamlit */
+div[data-testid="stMetric"] {{ background: #FFFFFF; border: 1px solid {LINE}; border-radius: 10px; padding: 10px 14px; }}
+div[data-testid="stExpander"] details {{ background: #FFFFFF; border: 1px solid {LINE}; border-radius: 10px; }}
+div[data-testid="stVerticalBlockBorderWrapper"] {{ border-color: {LINE} !important; }}
+div[data-testid="stDataFrame"] {{ border: 1px solid {LINE}; border-radius: 10px; }}
+div[data-testid="stChatMessage"] {{ background: #FFFFFF; border: 1px solid {LINE}; border-radius: 12px; padding: 12px 16px; }}
+.stButton button[kind="primary"], .stDownloadButton button[kind="primary"] {{ font-weight: 600; }}
 </style>
 """
 
 
 def md(text) -> str:
-    """Échappe « $ » (sinon Streamlit l'interprète comme une formule LaTeX)."""
+    """Échappe « $ » dans du Markdown (sinon Streamlit l'interprète comme une formule LaTeX)."""
     return str(text).replace("$", "\\$")
 
 
+def h(text) -> str:
+    """Texte inséré dans un bloc HTML : échappé, et « $ » en entité (l'échappement Markdown y resterait visible)."""
+    return html.escape(str(text)).replace("$", "&#36;")
+
+
 def badge(cat: str) -> str:
-    return f"<span class='badge' style='background:{CAT_COLOR[cat]}'>{CAT_TEXT[cat]}</span>"
+    return (f"<span class='badge' style='color:{CAT_COLOR[cat]};background:{CAT_TINT[cat]}'>"
+            f"{CAT_TEXT[cat]}</span>")
 
 
-def hero(title: str, subtitle: str, chips: list[str] | None = None):
-    c = "".join(f"<span class='chip'>{x}</span>" for x in chips or [])
-    st.markdown(f"<div class='hero'><h1>{title}</h1><p>{md(subtitle)}</p>"
-                f"{f'<div class=chips>{c}</div>' if c else ''}</div>", unsafe_allow_html=True)
+def dot(cat: str) -> str:
+    return f"<span style='display:inline-block;width:9px;height:9px;border-radius:50%;background:{CAT_COLOR[cat]};" \
+           f"margin:0 5px 1px 0'></span>"
+
+
+def page_header(eyebrow: str, title: str, subtitle: str = "", pills: list[str] | None = None):
+    p = "".join(f"<span class='pill'><b>{i + 1}</b>{html.escape(x)}</span>" for i, x in enumerate(pills or []))
+    st.markdown(f"<div class='page-head'><div><div class='eyebrow'>{html.escape(eyebrow)}</div>"
+                f"<h1>{h(title)}</h1><p>{h(subtitle)}</p>"
+                f"{f'<div style=margin-top:10px>{p}</div>' if p else ''}</div></div>", unsafe_allow_html=True)
+
+
+def section(title: str, note: str = ""):
+    st.markdown(f"<div class='sec'>{html.escape(title)}{f'<small>{html.escape(note)}</small>' if note else ''}</div>",
+                unsafe_allow_html=True)
+
+
+def kpis(items: list[tuple]):
+    """items : (libellé, valeur, sous-titre facultatif, couleur d'accent facultative)."""
+    cards = []
+    for it in items:
+        label, value = it[0], it[1]
+        sub = it[2] if len(it) > 2 and it[2] else ""
+        accent = it[3] if len(it) > 3 and it[3] else GREEN
+        cards.append(f"<div class='kpi' style='--accent:{accent}'><div class='l'>{html.escape(str(label))}</div>"
+                     f"<div class='v'>{h(value)}</div>"
+                     f"{f'<div class=s>{h(sub)}</div>' if sub else ''}</div>")
+    st.markdown(f"<div class='kpi-grid'>{''.join(cards)}</div>", unsafe_allow_html=True)
 
 
 def cat_scale():
@@ -95,10 +183,7 @@ def demo_data() -> tuple[pd.DataFrame, dict]:
 
 def set_active(df: pd.DataFrame, config: dict, demo: bool, sensitivity: bool = True):
     ev = cached_evaluate(df, engine.config_to_json(config), sensitivity)
-    res = ev["results"]
-    extra = [c for c in df.columns if c not in res.columns]
-    res = res.join(df[extra]) if extra else res
-    st.session_state["active"] = {"ev": {**ev, "results": res}, "demo": demo, "df": df, "config": config}
+    st.session_state["active"] = {"ev": ev, "demo": demo, "df": df, "config": config}
     st.session_state.pop("chat", None)                 # nouvelle analyse : nouvelle conversation
 
 
@@ -107,10 +192,6 @@ def active() -> dict:
         df, cfg = demo_data()
         set_active(df, cfg, demo=True)
     return st.session_state["active"]
-
-
-def criteria_meta() -> list[dict]:
-    return active()["config"]["criteres"]
 
 
 def column_config_for(criteria: list[dict], df: pd.DataFrame) -> dict:

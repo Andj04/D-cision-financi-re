@@ -13,7 +13,7 @@ Projet de machine learning de groupe dans le secteur bancaire. La banque est le 
 | `data/processed/` | Jeux train/val/test (non versionnés, lourds) et **petits artefacts versionnés** (CSV/JSON : audit, prédictions, `project_scores.csv`, résultats MCDA, sensibilités). |
 | `src/` | Pipeline : `data_prep.py`, `features.py`, `models.py`, `interpret_model.py`, `export_pd.py`, `simulate.py`, `project_scores.py`, `run_mcda.py`, `sensibilite_simulation.py`, `damodaran.py`. Outil réutilisable : `mcda.py` (méthodes), `engine.py` (configuration et évaluation de n'importe quel jeu), `evaluer.py` (ligne de commande). IA générative : `agent.py` (note par projet), `advisor.py` (conseiller conversationnel). `naming.py` (noms lisibles des projets). |
 | `notebooks/` | `01` audit/exploration, `02` logistique, `03` EBM/comparaison, `04` interprétabilité (lisent les sorties du pipeline). |
-| `app/` , `.streamlit/config.toml` | Application Streamlit (`app.py` + `common.py` + une page par fichier dans `views/`) et son thème. |
+| `app/` , `.streamlit/config.toml` | Application Streamlit (`app.py` + `common.py` + une page par fichier dans `views/`), logo de l'École Centrale Casablanca (`app/assets/`) et thème à ses couleurs (vert `#02987D`, gris `#72777A`, mesurés sur le logo). Les figures matplotlib suivent la même charte (`src/style.py` ; `python src/models.py --figures` les redessine sans réentraîner). |
 | `exemples/` | Jeu de 12 PME fictives et sa configuration JSON, pour essayer l'outil sur d'autres données. |
 | `models/` | Modèles entraînés (`risk_models.joblib`). |
 | `reports/` | Métriques, réglage des hyperparamètres, graphiques (calibration, importances, effets EBM), erreurs par segment. |

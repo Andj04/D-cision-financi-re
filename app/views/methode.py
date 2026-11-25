@@ -12,10 +12,11 @@ from common import D, P
 def render():
     act = common.active()
     cfg = act["config"]
-    common.hero("Méthode", "Comment la recommandation est construite, et ses limites.")
-    c1, c2 = st.columns(2)
+    common.page_header("Référence", "Méthode", "Comment la recommandation est construite, avec quels paramètres, "
+                       "et quelles sont ses limites.")
+    c1, c2 = st.columns(2, gap="large")
     with c1:
-        st.markdown("#### Chaîne de décision")
+        common.section("Chaîne de décision")
         for t, d in [("1. Données", "Démonstration : prêts SBA 7(a) FOIA ; cible `default_60m` (perte ≤ 60 mois après le "
                       "premier versement) ; séparation temporelle 2000-2012 / 2013-2014 / 2015-2016. Ou votre propre jeu."),
                      ("2. Modèle de risque", "Régression logistique et EBM, calibration isotonique ; EBM retenu. Sorties : "
@@ -29,7 +30,7 @@ def render():
                      ("6. Comité", "Décision finale humaine.")]:
             st.markdown(f"<div class='step'><b>{t}</b><br><span class='muted'>{d}</span></div>", unsafe_allow_html=True)
     with c2:
-        st.markdown(f"#### Paramètres de l'analyse active")
+        common.section("Paramètres de l'analyse active")
         st.markdown(f"**{cfg.get('nom')}**  \nPondération : "
                     f"{'AHP' if cfg.get('mode_poids') == 'ahp' else 'poids saisis'} · seuils q/p/v = "
                     f"{cfg['seuils']['q']:.0%} / {cfg['seuils']['p']:.0%} / {cfg['seuils']['v']:.0%} · λ = {cfg['coupure']:g}")
@@ -42,11 +43,11 @@ def render():
                        "crise de 2008) rendrait ce filtre inopérant.")
             post = D / "controle_a_posteriori.csv"
             if post.exists():
-                st.markdown("#### Contrôle a posteriori (illustration)")
+                common.section("Contrôle a posteriori (illustration)")
                 st.dataframe(pd.read_csv(post), hide_index=True, width="stretch")
                 st.caption("Vrais défauts parmi les 40 prêts, lus APRÈS les décisions et jamais utilisés dans un calcul. "
                            "Quelques cas : aucune valeur de preuve.")
-    st.markdown("#### Critères et profils ELECTRE TRI")
+    common.section("Critères et profils ELECTRE TRI")
     st.dataframe(pd.DataFrame([{"Critère": c["libelle"], "Colonne": c["colonne"],
                                 "Sens": "à maximiser" if c["sens"] == "max" else "à minimiser",
                                 "Poids": f"{100 * float(act['ev']['weights'][c['colonne']]):.1f} %",
@@ -57,7 +58,7 @@ def render():
         prof = pd.read_csv(P / "profils_electre_tri.csv")[["critere", "type", "justification"]]
         with st.expander("Justification des profils de la démonstration"):
             st.dataframe(prof, hide_index=True, width="stretch")
-    st.markdown("#### Limites connues")
+    common.section("Limites connues")
     st.markdown(
         "- Démonstration : indicateurs financiers **simulés** ; une catégorie n'est conservée que dans environ la moitié "
         "des tirages de simulation. Les noms des projets sont **fictifs** (activité réelle, nom de famille inventé).\n"

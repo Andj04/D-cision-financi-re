@@ -11,8 +11,6 @@ import time
 from pathlib import Path
 
 import joblib
-import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -25,7 +23,10 @@ from sklearn.metrics import (average_precision_score, brier_score_loss, f1_score
 from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 
+import style
 from features import FEATURES, load_split, logreg_preprocessor
+
+style.apply()
 
 ROOT = Path(__file__).resolve().parents[1]
 SEED = 42
@@ -50,6 +51,33 @@ def crossfit_isotonic(p, y, n_splits=5):
         iso = IsotonicRegression(out_of_bounds="clip", y_min=0, y_max=1).fit(p[tr], y[tr])
         out[te] = iso.predict(p[te])
     return out
+
+
+LABELS = {"logreg": "Régression logistique (calibrée)", "ebm": "EBM (calibré)"}
+
+
+def plot_calibration(yva, cal_val: dict, yte, cal_test: dict):
+    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
+    for ax, title, y, P in [(axes[0], "Validation (2013-2014)", yva, cal_val), (axes[1], "Test (2015-2016)", yte, cal_test)]:
+        ax.plot([0, 0.3], [0, 0.3], ls="--", lw=1, color="#A9ADB0", label="calibration parfaite")
+        for n in ["ebm", "logreg"]:
+            fr, mp = calibration_curve(y, P[n], n_bins=10, strategy="quantile")
+            ax.plot(mp, fr, marker="o", ms=4, lw=1.8, label=LABELS[n],
+                    color=style.GREEN if n == "ebm" else style.GREY)
+        ax.set_xlabel("probabilité prédite"); ax.set_ylabel("fréquence observée"); ax.set_title(title); ax.legend()
+    fig.tight_layout(); fig.savefig(ROOT / "reports/calibration.png", dpi=130)
+
+
+def figures_only():
+    """Redessine la figure de calibration à partir du modèle sauvegardé (sans réentraîner) : mêmes données,
+    même calibration croisée (même graine), donc mêmes courbes."""
+    art = joblib.load(ROOT / "models/risk_models.joblib")
+    Xva, yva, _ = load_split("val")
+    Xte, yte, _ = load_split("test")
+    yva, yte = yva.values, yte.values
+    cal_val = {n: crossfit_isotonic(art[n].predict_proba(Xva)[:, 1], yva) for n in ("logreg", "ebm")}
+    cal_test = {n: art["calibrators"][n].predict(art[n].predict_proba(Xte)[:, 1]) for n in ("logreg", "ebm")}
+    plot_calibration(yva, cal_val, yte, cal_test)
 
 
 def main():
@@ -115,17 +143,8 @@ def main():
     print(test.round(4).to_string(), flush=True)
 
     # --- courbes de calibration (validation puis test)
-    fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
-    for ax, title, y, P in [(axes[0], "Validation (2013-2014)", yva, cal_val),
-                            (axes[1], "Test (2015-2016)", yte,
-                             {n: calibrators[n].predict(m.predict_proba(Xte)[:, 1])
-                              for n, m in [("logreg", logreg), ("ebm", ebm)]})]:
-        for n, p in P.items():
-            fr, mp = calibration_curve(y, p, n_bins=10, strategy="quantile")
-            ax.plot(mp, fr, marker="o", label=f"{n} calibré")
-        ax.plot([0, 0.3], [0, 0.3], "k--", lw=1); ax.set_xlabel("probabilité prédite")
-        ax.set_ylabel("fréquence observée"); ax.set_title(title); ax.legend()
-    fig.tight_layout(); fig.savefig(ROOT / "reports/calibration.png", dpi=130)
+    plot_calibration(yva, cal_val, yte, {n: calibrators[n].predict(m.predict_proba(Xte)[:, 1])
+                                         for n, m in [("logreg", logreg), ("ebm", ebm)]})
 
     joblib.dump({"logreg": logreg, "ebm": ebm, "calibrators": calibrators, "chosen": chosen,
                  "features": FEATURES, "seuil_F1": {n: best_f1_threshold(yva, cal_val[n]) for n in cal_val}},
@@ -139,4 +158,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    figures_only() if "--figures" in sys.argv else main()

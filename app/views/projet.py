@@ -12,6 +12,8 @@ from common import badge, md
 def render():
     act = common.active()
     res, crit = act["ev"]["results"], act["config"]["criteres"]
+    common.page_header("Fiche projet", "Analyse détaillée d'un dossier",
+                       "Position du projet sur chaque critère, motifs de la recommandation et note rédigée par l'agent.")
     order = res.sort_values(["ecarte", "rang_electre3"])
     names = order["nom"].tolist()
     default = st.session_state.get("projet_choisi")
@@ -29,7 +31,7 @@ def render():
                 f"{engine.fmt(row[c], 'money') if c in ('montant_pret', 'investissement') else row[c]}"
                 for c in act["config"].get("colonnes_info", []) if c in row and pd.notna(row[c])]
         if info:
-            st.markdown(md(f"<span class='muted'>{' · '.join(map(str, info))}</span>"), unsafe_allow_html=True)
+            st.markdown(f"<span class='muted'>{common.h(' · '.join(map(str, info)))}</span>", unsafe_allow_html=True)
     with h2:
         if row.ecarte:
             st.error(md(f"Écarté par le filtre : {row.motif_ecarte}"))
@@ -40,13 +42,12 @@ def render():
                 st.warning("Rang ambigu : les deux distillations d'ELECTRE III divergent "
                            f"({row.rang_distillation_descendante:.0f} contre {row.rang_distillation_ascendante:.0f}).")
 
-    m = st.columns(min(4, len(crit)))
-    for box, c in zip(m, crit[:4]):
-        box.metric(c["libelle"], engine.fmt(row[c["colonne"]], c.get("format", "dec2")))
+    common.kpis([(c["libelle"], engine.fmt(row[c["colonne"]], c.get("format", "dec2")),
+                  "à maximiser" if c["sens"] == "max" else "à minimiser") for c in crit[:4]])
 
-    a, b = st.columns([1.15, 1])
+    a, b = st.columns([1.15, 1], gap="large")
     with a:
-        st.markdown("#### Position par rapport aux seuils de décision")
+        common.section("Position par rapport aux seuils de décision")
         recs, pts = [], []
         for c in crit:
             col, s = c["colonne"], (1 if c["sens"] == "max" else -1)
@@ -71,7 +72,7 @@ def render():
         st.altair_chart((zl + pl).properties(height=34 * len(crit) + 40), width="stretch")
         st.caption("Bandes : zones délimitées par les profils ELECTRE TRI b1 et b2. Losange : le projet. "
                    "Les critères à minimiser sont retournés (à droite = meilleur).")
-        with st.expander("Valeurs détaillées"):
+        with st.expander("Valeurs détaillées", icon=":material/table_rows:"):
             st.dataframe(pd.DataFrame({
                 "Critère": [c["libelle"] for c in crit],
                 "Valeur": [engine.fmt(row[c["colonne"]], c.get("format", "dec2")) for c in crit],
@@ -91,9 +92,9 @@ def render():
                       help="20 tirages des indicateurs financiers simulés pour ce même prêt")
 
     with b:
-        st.markdown("#### Note de l'agent")
+        common.section("Note de l'agent rédacteur")
         key = f"note_{act['config'].get('nom')}_{row['id']}"
-        if st.button("✍️ Rédiger la note avec le LLM", type="primary", width="stretch"):
+        if st.button("Rédiger la note avec l'IA", type="primary", width="stretch", icon=":material/edit_note:"):
             with st.spinner("Rédaction puis vérification des chiffres…"):
                 st.session_state[key] = agent.write_note(row.to_dict(), crit)
         res_note = st.session_state.get(key) or {
@@ -102,10 +103,11 @@ def render():
         with st.container(border=True):
             st.markdown(md(res_note["note"]))
         ok = res_note["source"].startswith("LLM")
-        st.markdown(md(f"{'✅' if ok else 'ℹ️'} **Source** : {res_note['source']}  \n"
-                       f"**Contrôle** : {res_note['verification']}"))
-        st.info("L'agent recopie les résultats déjà calculés ; un vérificateur rejette toute note contenant un "
-                "chiffre absent des données. La décision finale revient au comité.", icon="🛡️")
-        if st.button("💬 Poser une question sur ce projet au conseiller", width="stretch"):
+        st.markdown(f"<span class='tag {'ok' if ok else 'info'}'>{'Rédigée par l’IA, chiffres vérifiés' if ok else 'Note de gabarit'}"
+                    f"</span><span class='muted'>{common.h(res_note['source'])} · {common.h(res_note['verification'])}</span>",
+                    unsafe_allow_html=True)
+        st.caption("L'agent recopie les résultats déjà calculés ; un vérificateur rejette toute note contenant un "
+                   "chiffre absent des données. La décision finale revient au comité.")
+        if st.button("Interroger le conseiller sur ce projet", width="stretch", icon=":material/forum:"):
             st.session_state["chat_prefill"] = f"Que penses-tu du projet {pid} ? Quels sont ses points forts et ses risques ?"
             st.switch_page(common.PAGES["conseiller"])

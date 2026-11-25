@@ -34,7 +34,8 @@ def _candidates(df: pd.DataFrame, configured: list[str]) -> list[str]:
 
 
 def _step(n: int, title: str, help_txt: str = ""):
-    st.markdown(f"<h4><span class='stepnum'>{n}</span>{title}</h4>", unsafe_allow_html=True)
+    st.markdown(f"<div class='sec' style='border:none;padding-left:0;margin-top:26px'><span class='stepnum'>{n}</span>"
+                f"{title}</div>", unsafe_allow_html=True)
     if help_txt:
         st.caption(help_txt)
 
@@ -43,9 +44,10 @@ def render():
     act = common.active()
     if "draft_df" not in st.session_state:
         _load_draft(act["df"], act["config"], "demo" if act["demo"] else "import")
-    common.hero("Configurer l'analyse", "Importez vos propres projets et réglez chaque paramètre de la méthode ; "
-                "toutes les pages se mettent ensuite à jour sur cette nouvelle analyse.",
-                ["Données", "Critères et seuils", "Poids", "Filtre", "ELECTRE", "Lancer"])
+    common.page_header("Outil réutilisable", "Configurer l'analyse",
+                       "Importez vos propres projets et réglez chaque paramètre de la méthode ; toutes les pages se "
+                       "mettent ensuite à jour sur cette nouvelle analyse.",
+                       ["Données", "Critères et seuils", "Pondération", "Filtre", "ELECTRE", "Lancer"])
     ver = st.session_state["draft_ver"]
     if st.session_state.pop("launched", False):
         res = act["ev"]["results"]["categorie_finale"].value_counts()
@@ -59,12 +61,13 @@ def render():
           "et pas de colonne « pd_ml », la probabilité de défaut est calculée par le modèle de risque.")
     c1, c2, c3 = st.columns([1.3, 1.3, 1])
     with c1:
-        if st.button("📦 Charger la démonstration (40 prêts SBA)", width="stretch"):
+        if st.button("Charger la démonstration (40 prêts SBA)", width="stretch", icon=":material/inventory_2:"):
             df, cfg = common.demo_data()
             _load_draft(df, cfg, "demo")
             st.rerun()
-        st.download_button("⬇️ Modèle de fichier (CSV)", engine.template_projects().to_csv(index=False).encode("utf-8"),
-                           "modele_projets.csv", "text/csv", width="stretch")
+        st.download_button("Modèle de fichier (CSV)", engine.template_projects().to_csv(index=False).encode("utf-8"),
+                           "modele_projets.csv", "text/csv", width="stretch",
+                           icon=":material/download:")
     with c2:
         up = st.file_uploader("Importer des projets (CSV ou Excel)", type=["csv", "xlsx", "xls"], key="up_data")
         if up is not None and st.session_state.get("last_upload") != (up.name, up.size):
@@ -126,7 +129,7 @@ def render():
     sel = edited[edited["utiliser"]]
     crit = [{k: (float(r[k]) if k in ("poids", "b1", "b2") else r[k]) for k in
              ("colonne", "libelle", "sens", "poids", "format", "b1", "b2")} for _, r in sel.iterrows()]
-    if st.button("↻ Recalculer les profils b1/b2 (tertiles du jeu, selon le sens)") and crit:
+    if st.button("Recalculer les profils b1/b2 (tertiles du jeu, selon le sens)", icon=":material/refresh:") and crit:
         prof = mcda.tertile_profiles(df, {c["colonne"]: 1 if c["sens"] == "max" else -1 for c in crit})
         for c in crit:
             c["b1"], c["b2"] = prof[c["colonne"]]
@@ -223,17 +226,18 @@ def render():
     l1, l2, l3 = st.columns([1.4, 1, 1])
     if errs:
         st.warning("À corriger avant de lancer :\n\n" + "\n".join(f"- {e}" for e in errs))
-    if l1.button("▶️ Lancer l'évaluation", type="primary", disabled=bool(errs), width="stretch"):
+    if l1.button("Lancer l'évaluation", type="primary", disabled=bool(errs), width="stretch",
+                 icon=":material/play_arrow:"):
         try:
             common.set_active(df, config, demo=st.session_state["draft_src"] == "demo", sensitivity=sens_on)
             st.session_state["launched"] = True
             st.rerun()
         except Exception as e:
             st.error(f"Évaluation impossible : {e}")
-    l2.download_button("💾 Enregistrer la configuration (JSON)", engine.config_to_json(config).encode("utf-8"),
-                       "configuration_mcda.json", "application/json", width="stretch")
+    l2.download_button("Enregistrer la configuration (JSON)", engine.config_to_json(config).encode("utf-8"),
+                       "configuration_mcda.json", "application/json", width="stretch", icon=":material/save:")
     buf = io.StringIO()
     df.to_csv(buf, index=False)
-    l3.download_button("⬇️ Données utilisées (CSV)", buf.getvalue().encode("utf-8"), "projets.csv", "text/csv",
-                       width="stretch")
+    l3.download_button("Données utilisées (CSV)", buf.getvalue().encode("utf-8"), "projets.csv", "text/csv",
+                       width="stretch", icon=":material/download:")
     st.caption("En ligne de commande : python src/evaluer.py projets.csv --config configuration_mcda.json")

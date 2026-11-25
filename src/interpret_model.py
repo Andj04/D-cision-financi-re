@@ -6,14 +6,15 @@ Le test ne sert ici qu'aux explications locales des 40 projets, qui sont des pr�
 from pathlib import Path
 
 import joblib
-import matplotlib
-matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 
+import style
 from features import load_split
+
+style.apply()
 
 ROOT = Path(__file__).resolve().parents[1]
 REP = ROOT / "reports"
@@ -25,6 +26,11 @@ VAR_FR = {"duree_classe": "durée du prêt", "etat": "État", "age_entreprise": 
           "ligne_renouvelable": "ligne renouvelable", "secteur_naics2": "secteur NAICS", "franchise": "franchise",
           "taux_fixe_variable": "taux fixe ou variable", "part_garantie": "part garantie par la SBA",
           "taux_manquant": "taux non renseigné", "log_montant": "montant"}
+
+
+def fr_term(term: str) -> str:
+    """« log_montant & procedure » -> « montant × procédure SBA » (libellés des figures)."""
+    return " × ".join(VAR_FR.get(t, t) for t in str(term).split(" & "))
 
 
 def readable(var: str, x) -> str:
@@ -67,8 +73,8 @@ def main():
     perm, base = permutation_importance(pred, Xva, yva.values)
     perm.to_csv(REP / "permutation_importance_validation.csv", index=False)
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
-    g = glob.head(12)[::-1]; ax[0].barh(g.terme, g.importance_native); ax[0].set_title("EBM : importance native (|log-odds| moyen)")
-    p = perm.head(12)[::-1]; ax[1].barh(p.variable, p.baisse_AUROC_moyenne, xerr=p.ecart_type)
+    g = glob.head(12)[::-1]; ax[0].barh(g.terme.map(fr_term), g.importance_native, color=style.GREY); ax[0].set_title("EBM : importance native (|log-odds| moyen)")
+    p = perm.head(12)[::-1]; ax[1].barh(p.variable.map(fr_term), p.baisse_AUROC_moyenne, xerr=p.ecart_type, color=style.GREEN, ecolor=style.DARK)
     ax[1].set_title(f"Permutation sur la validation (AUROC de base {base:.3f})"); fig.tight_layout()
     fig.savefig(REP / "importance_variables.png", dpi=130)
 
@@ -78,11 +84,13 @@ def main():
         d = ebm.explain_global().data(ebm.term_names_.index(term))
         names, vals = list(d["names"]), np.asarray(d["scores"], float)
         if len(names) == len(vals) + 1:                               # variable continue : bornes de bins
-            ax_.step([float(x) for x in names[:-1]], vals, where="post")
+            ax_.step([float(x) for x in names[:-1]], vals, where="post", color=style.GREEN, lw=1.8)
         else:                                                         # catégorielle : 10 plus fortes modalités
             top = np.argsort(-np.abs(vals))[:10]
-            ax_.barh([str(names[j]) for j in top][::-1], vals[top][::-1])
-        ax_.set_title(f"Effet : {term}"); ax_.set_ylabel("log-odds")
+            v = vals[top][::-1]
+            ax_.barh([str(names[j]) for j in top][::-1], v,
+                     color=["#C0503F" if x > 0 else style.GREEN for x in v])   # rouge = augmente le risque
+        ax_.set_title(f"Effet : {VAR_FR.get(term, term)}"); ax_.set_ylabel("log-odds")
     fig.tight_layout(); fig.savefig(REP / "ebm_effets.png", dpi=130)
 
     # 4. analyse des erreurs sur la validation (secteur, État, procédure) : défauts réels vs prédits, seuil F1
