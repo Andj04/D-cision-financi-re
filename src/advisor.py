@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import re
 import urllib.error
 
 import numpy as np
@@ -36,8 +37,40 @@ SYSTEM = (
     "7. Pas de formule LaTeX ni de symbole « $ » autour des mots ; écris les montants en dollars en toutes lettres "
     "ou avec « $ » après le nombre.\n"
     "5. Tu conseilles, tu ne décides pas : la décision finale revient au comité. Aucune promesse de rendement.\n"
-    "6. Pour expliquer la méthode (AHP, ELECTRE, PROMETHEE, filtre, modèle de risque), appelle « parametres_methode »."
+    "6. Pour expliquer la méthode (AHP, ELECTRE, PROMETHEE, filtre, modèle de risque), appelle « parametres_methode ».\n"
+    "8. Les SEULES méthodes utilisées sont : AHP (pondération), ELECTRE III (classement), ELECTRE TRI avec la règle "
+    "d'affectation pessimiste (catégories) et PROMETHEE II (comparaison) ; modèle de risque : régression logistique et "
+    "EBM (Explainable Boosting Machine). N'emploie aucun autre nom de méthode (pas d'ELECTRE Tri-C, IV, IS, TOPSIS...).\n"
+    "9. Si l'on te demande ce que tu sais faire ou ce que tu ne peux pas faire, appelle « capacites » et décris "
+    "exactement ce qu'il renvoie, limites comprises, sans rien ajouter."
 )
+
+ALLOWED_METHODS = ["AHP", "ELECTRE III", "ELECTRE TRI", "PROMETHEE II", "EBM", "régression logistique"]
+# noms de méthodes que le conseiller ne doit pas attribuer au projet (signalés s'ils apparaissent)
+_FOREIGN = re.compile(                                  # sensible à la casse : « ELECTRE TRI c'est » n'est pas « Tri-C »
+    r"\bELECTRE[\s-]*(?:(?:TRI|Tri)[\s-]?n?C\b|(?:TRI|Tri)[\s-]?B\b|IV\b|IS\b|II\b|I\b)"
+    r"|\bPROMETHEE[\s-]*(?:I|III|IV|V|VI)\b|\b(?:TOPSIS|VIKOR|MACBETH|SMARTER|BWM|WSM|WPM)\b|\b[Bb]est[- ][Ww]orst\b")
+
+CAPABILITIES = {
+    "ce_que_je_fais": [
+        "Vue d'ensemble de l'analyse : nombre de projets, catégories, exclusions et motifs, poids, meilleurs projets, fragilité.",
+        "Liste de projets filtrée (catégorie, texte) et triée par critère ou par rang ELECTRE III.",
+        "Fiche d'un projet : critères, catégorie, rangs, position par rapport aux seuils b1/b2, fragilité, facteurs de risque.",
+        "Comparaison de 2 à 6 projets critère par critère.",
+        "Statistiques d'un critère (moyenne, médiane, min, max), globales ou par catégorie, secteur ou État si ces colonnes existent.",
+        "Scénarios « et si » : changer un ou plusieurs poids à la fois, la coupure λ, ou désactiver le filtre, puis voir "
+        "quels projets changent de catégorie (simulation temporaire, l'analyse affichée ne change pas).",
+        "Explication de la méthode avec les paramètres réels : AHP, filtre, profils, ELECTRE III, ELECTRE TRI (règle "
+        "pessimiste), PROMETHEE II, sensibilité.",
+        "Démonstration uniquement : données historiques SBA (taux de défaut par période, audit, métriques et variables "
+        "du modèle de risque, erreurs par État, secteur ou procédure)."],
+    "ce_que_je_ne_fais_pas": [
+        "Je ne calcule rien moi-même : chaque chiffre vient d'un outil.",
+        "Je ne modifie pas l'analyse affichée (pour cela : page « Configurer l'analyse »).",
+        "Je n'ajoute pas de projet et je ne consulte pas un prêt SBA individuel.",
+        "Je n'ai pas accès à Internet ni à des informations sur les entreprises (les noms de la démonstration sont fictifs).",
+        "Je ne décide pas : la décision revient au comité ; je ne promets aucun rendement."],
+}
 
 # ----------------------------------------------------------------------------------------------- espace de travail
 class Workspace:
@@ -177,18 +210,41 @@ class Workspace:
                              "minimum": self.f(col, v.min()), "maximum": self.f(col, v.max())}
         return {"critere": self.meta[col]["libelle"], "par": groupe or "aucun", "statistiques": out}
 
+    def capacites(self) -> dict:
+        return {**CAPABILITIES, "methodes_utilisees": ALLOWED_METHODS, "jeu_actif": self.cfg.get("nom")}
+
+    def _col(self, critere: str) -> str | None:
+        return critere if critere in self.meta else next(
+            (c["colonne"] for c in self.crit if c["libelle"].lower() == str(critere).lower()), None)
+
     def simuler_scenario(self, critere: str | None = None, nouveau_poids: float | None = None,
-                         coupure: float | None = None, sans_filtre: bool = False) -> dict:
+                         poids: list[dict] | None = None, coupure: float | None = None,
+                         sans_filtre: bool = False) -> dict:
+        """poids : [{"critere": ..., "poids": 0.3}, ...] (un ou plusieurs) ; critere / nouveau_poids : forme courte."""
         cfg = json.loads(engine.config_to_json(self.cfg))
         w = self.w.copy()
+        changes_req = list(poids or [])
         if critere:
-            col = critere if critere in self.meta else next(
-                (c["colonne"] for c in self.crit if c["libelle"].lower() == str(critere).lower()), None)
-            if col is None or nouveau_poids is None:
-                return {"erreur": "préciser un critère connu et un nouveau poids (entre 0 et 1)"}
-            w[col] = float(nouveau_poids)
-            others = [c for c in w.index if c != col]
-            w[others] = w[others] / w[others].sum() * (1 - w[col])          # les autres gardent leurs proportions
+            changes_req.append({"critere": critere, "poids": nouveau_poids})
+        if changes_req:
+            fixed = {}
+            for ch in changes_req:
+                col = self._col(ch.get("critere", ""))
+                if col is None or ch.get("poids") is None:
+                    return {"erreur": f"critère inconnu ou poids manquant : {ch}",
+                            "criteres": {c["colonne"]: c["libelle"] for c in self.crit}}
+                p = float(ch["poids"])
+                fixed[col] = p / 100 if p > 1 else p                     # accepte 30 ou 0,30
+            total = sum(fixed.values())
+            others = [c for c in w.index if c not in fixed]
+            if total > 1 + 1e-9:
+                return {"erreur": f"la somme des poids imposés ({100 * total:.0f} %) dépasse 100 %"}
+            for col, p in fixed.items():
+                w[col] = p
+            if others:
+                rest = w[others].sum()
+                w[others] = (w[others] / rest * (1 - total)) if rest > 0 else (1 - total) / len(others)
+            w = w / w.sum()                                             # les autres gardent leurs proportions
         cfg["mode_poids"] = "manuel"
         for c in cfg["criteres"]:
             c["poids"] = float(w[c["colonne"]])
@@ -287,6 +343,7 @@ def tool_specs(ws: Workspace) -> list[dict]:
     crit = [c["colonne"] for c in ws.crit]
     s = lambda d, **k: {"type": "string", "description": d, **k}  # noqa: E731
     specs = [
+        ("capacites", "Ce que le conseiller sait faire et ne sait pas faire, et les méthodes réellement utilisées.", {}, []),
         ("resume_resultats", "Vue d'ensemble : nombre de projets, catégories, exclusions, poids, meilleurs projets, fragilité.", {}, []),
         ("lister_projets", "Liste de projets filtrée et triée (ex. les 5 meilleurs Financer, les plus risqués).",
          {"categorie": s("Financer, Conditionner ou Refuser", enum=mcda.CATEGORIES),
@@ -302,10 +359,14 @@ def tool_specs(ws: Workspace) -> list[dict]:
         ("statistiques", "Moyenne, médiane, minimum, maximum d'un critère, éventuellement par catégorie, secteur ou État.",
          {"critere": s("colonne du critère", enum=crit), "groupe": s("regroupement", enum=["categorie", "secteur", "etat"])},
          ["critere"]),
-        ("simuler_scenario", "Et si ? Relance le MCDA avec un nouveau poids pour un critère, une autre coupure λ ou sans filtre, "
-                             "et liste les projets qui changent de catégorie.",
-         {"critere": s("critère dont on change le poids", enum=crit),
-          "nouveau_poids": {"type": "number", "description": "nouveau poids entre 0 et 1 (les autres sont ajustés)"},
+        ("simuler_scenario", "Et si ? Relance le MCDA avec un ou plusieurs nouveaux poids, une autre coupure λ ou sans "
+                             "filtre, et liste les projets qui changent de catégorie. Les poids non cités gardent leurs "
+                             "proportions et se partagent le reste.",
+         {"poids": {"type": "array", "description": "nouveaux poids imposés (un ou plusieurs critères)",
+                    "items": {"type": "object", "properties": {
+                        "critere": s("colonne du critère", enum=crit),
+                        "poids": {"type": "number", "description": "poids entre 0 et 1 (ex. 0.3 pour 30 %)"}},
+                        "required": ["critere", "poids"]}},
           "coupure": {"type": "number", "description": "coupure λ entre 0,5 et 1"},
           "sans_filtre": {"type": "boolean", "description": "désactiver le filtre éliminatoire"}}, []),
         ("parametres_methode", "Paramètres et explication de la méthode (critères, poids/AHP, filtre, profils, seuils, méthodes, données, limites).",
@@ -429,11 +490,17 @@ def ask(question: str, history: list[dict], ws: Workspace, max_steps: int = 6) -
         return {"answer": None, "source": f"réponse inattendue ({type(e).__name__})", "tools": calls, "unverified": []}
     sources = [json.dumps(c["result"], ensure_ascii=False) for c in calls] + [question] + [m["content"] for m in history]
     return {"answer": answer or "(réponse vide)", "source": f"{provider} {model}", "tools": calls,
-            "unverified": _verify(answer or "", sources)}
+            "unverified": _verify(answer or "", sources), "foreign_methods": foreign_methods(answer or "")}
+
+
+def foreign_methods(answer: str) -> list[str]:
+    """Noms de méthodes cités dans la réponse mais non utilisés par le projet (ex. « ELECTRE Tri-C »)."""
+    return sorted({m.group(0).strip() for m in _FOREIGN.finditer(answer)})
 
 
 # ----------------------------------------------------------------------------------------------- questions rapides
 QUICK = {
+    "Ce que je sais faire": ("capacites", {}),
     "Vue d'ensemble des résultats": ("resume_resultats", {}),
     "Les 5 meilleurs projets": ("lister_projets", {"limite": 5, "inclure_ecartes": False}),
     "Projets refusés et motifs": ("lister_projets", {"categorie": "Refuser", "limite": 20}),

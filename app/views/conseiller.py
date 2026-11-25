@@ -1,4 +1,6 @@
 """Conseiller IA : questions en langage naturel sur le jeu de projets, les résultats et la méthode."""
+import re
+
 import streamlit as st
 
 import advisor
@@ -31,14 +33,23 @@ def _suggestions(act) -> list[str]:
     return s
 
 
+def _clean(text: str) -> str:
+    """Retire la notation LaTeX courte que le modèle glisse parfois ($q$, $\\lambda$) sans toucher aux montants en $."""
+    text = re.sub(r"\$\\?(lambda)\$", "λ", text)
+    return re.sub(r"\$([A-Za-zλ_{}]{1,12})\$", r"\1", text)
+
+
 def _show_answer(msg: dict):
-    st.markdown(md(msg["content"]))
+    st.markdown(md(_clean(msg["content"])))
     if msg.get("tools"):
         with st.expander(f"🔍 Données consultées ({len(msg['tools'])})"):
             for t in msg["tools"]:
                 st.markdown(f"**{TOOL_FR.get(t['name'], t['name'])}** `{t['args']}`")
                 st.json(t["result"], expanded=False)
     note = f"Source : {msg.get('source', '')}"
+    if msg.get("foreign_methods"):
+        note += (f" · ⚠️ méthode(s) citée(s) mais non utilisée(s) par ce projet : {', '.join(msg['foreign_methods'])} "
+                 "(seules AHP, ELECTRE III, ELECTRE TRI et PROMETHEE II sont utilisées)")
     if msg.get("unverified"):
         note += f" · ⚠️ chiffres non retrouvés dans les données consultées : {', '.join(msg['unverified'])}"
     elif msg.get("tools"):
@@ -60,7 +71,7 @@ def _ask(question: str):
                    "Les questions rapides ci-dessous fonctionnent sans LLM.", "source": "indisponible", "tools": []}
         else:
             msg = {"role": "assistant", "content": r["answer"], "source": r["source"], "tools": r["tools"],
-                   "unverified": r["unverified"]}
+                   "unverified": r["unverified"], "foreign_methods": r.get("foreign_methods", [])}
         _show_answer(msg)
     hist.append(msg)
 

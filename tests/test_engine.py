@@ -74,6 +74,22 @@ def test_advisor_tools_without_llm(demo_eval):
         assert callable(getattr(ws, spec["name"]))
 
 
+def test_scenario_several_weights_and_capabilities(demo_eval):
+    ws = advisor.Workspace(demo_eval, demo=True)
+    sc = ws.simuler_scenario(poids=[{"critere": "esg_score", "poids": 0.2}, {"critere": "van", "poids": 30}])
+    w = {k: float(v.rstrip(" %")) for k, v in sc["poids_utilises"].items()}
+    assert w["Score ESG"] == 20.0 and w["VAN"] == 30.0 and abs(sum(w.values()) - 100) < 0.5
+    assert "erreur" in ws.simuler_scenario(poids=[{"critere": "van", "poids": 0.8}, {"critere": "pd_ml", "poids": 0.5}])
+    cap = ws.capacites()
+    assert cap["ce_que_je_ne_fais_pas"] and "ELECTRE TRI" in cap["methodes_utilisees"]
+
+
+def test_foreign_method_names_flagged():
+    assert advisor.foreign_methods("On utilise ELECTRE Tri-C et TOPSIS.") == ["ELECTRE Tri-C", "TOPSIS"]
+    ok = "AHP, ELECTRE III, ELECTRE TRI (c'est la règle pessimiste), PROMETHEE II et l'EBM."
+    assert advisor.foreign_methods(ok) == []
+
+
 def test_verifier_handles_thousands_and_flags_invented():
     src = [json.dumps({"prets": 10601, "taux": "3.4 %"})]
     assert advisor._verify("10 601 prêts, taux de 3,4 %", src) == []
