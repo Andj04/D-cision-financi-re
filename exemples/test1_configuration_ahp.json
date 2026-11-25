@@ -1,0 +1,245 @@
+{
+  "nom": "Test 1 : 15 PME du Grand Casablanca (fictives)",
+  "criteres": [
+    {
+      "colonne": "pd_ml",
+      "libelle": "Probabilité de défaut",
+      "sens": "min",
+      "poids": 0.25,
+      "format": "pct",
+      "b1": 0.06,
+      "b2": 0.035
+    },
+    {
+      "colonne": "van",
+      "libelle": "VAN (MAD)",
+      "sens": "max",
+      "poids": 0.15,
+      "format": "money",
+      "b1": 0,
+      "b2": 1000000
+    },
+    {
+      "colonne": "delai_recuperation",
+      "libelle": "Délai de récupération (ans)",
+      "sens": "min",
+      "poids": 0.08,
+      "format": "dec1",
+      "b1": 10,
+      "b2": 6
+    },
+    {
+      "colonne": "dscr_min",
+      "libelle": "DSCR minimum",
+      "sens": "max",
+      "poids": 0.2,
+      "format": "dec2",
+      "b1": 1.0,
+      "b2": 1.25
+    },
+    {
+      "colonne": "dette_fonds_propres",
+      "libelle": "Dette / fonds propres",
+      "sens": "min",
+      "poids": 0.1,
+      "format": "dec2",
+      "b1": 3.0,
+      "b2": 1.5
+    },
+    {
+      "colonne": "couverture_garanties",
+      "libelle": "Couverture par les garanties",
+      "sens": "max",
+      "poids": 0.1,
+      "format": "dec2",
+      "b1": 0.5,
+      "b2": 1.0
+    },
+    {
+      "colonne": "esg_score",
+      "libelle": "Score ESG",
+      "sens": "max",
+      "poids": 0.07,
+      "format": "int",
+      "b1": 50,
+      "b2": 70
+    },
+    {
+      "colonne": "emplois_par_million",
+      "libelle": "Emplois par million MAD",
+      "sens": "max",
+      "poids": 0.05,
+      "format": "dec1",
+      "b1": 15,
+      "b2": 35
+    }
+  ],
+  "mode_poids": "ahp",
+  "ahp_jugements": [
+    {
+      "critere_a": "pd_ml",
+      "critere_b": "dscr_min",
+      "jugement": "1"
+    },
+    {
+      "critere_a": "pd_ml",
+      "critere_b": "van",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "pd_ml",
+      "critere_b": "couverture_garanties",
+      "jugement": "3"
+    },
+    {
+      "critere_a": "pd_ml",
+      "critere_b": "dette_fonds_propres",
+      "jugement": "3"
+    },
+    {
+      "critere_a": "pd_ml",
+      "critere_b": "delai_recuperation",
+      "jugement": "3"
+    },
+    {
+      "critere_a": "pd_ml",
+      "critere_b": "esg_score",
+      "jugement": "4"
+    },
+    {
+      "critere_a": "pd_ml",
+      "critere_b": "emplois_par_million",
+      "jugement": "5"
+    },
+    {
+      "critere_a": "dscr_min",
+      "critere_b": "van",
+      "jugement": "1"
+    },
+    {
+      "critere_a": "dscr_min",
+      "critere_b": "couverture_garanties",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "dscr_min",
+      "critere_b": "dette_fonds_propres",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "dscr_min",
+      "critere_b": "delai_recuperation",
+      "jugement": "3"
+    },
+    {
+      "critere_a": "dscr_min",
+      "critere_b": "esg_score",
+      "jugement": "3"
+    },
+    {
+      "critere_a": "dscr_min",
+      "critere_b": "emplois_par_million",
+      "jugement": "4"
+    },
+    {
+      "critere_a": "van",
+      "critere_b": "couverture_garanties",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "van",
+      "critere_b": "dette_fonds_propres",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "van",
+      "critere_b": "delai_recuperation",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "van",
+      "critere_b": "esg_score",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "van",
+      "critere_b": "emplois_par_million",
+      "jugement": "3"
+    },
+    {
+      "critere_a": "couverture_garanties",
+      "critere_b": "dette_fonds_propres",
+      "jugement": "1"
+    },
+    {
+      "critere_a": "couverture_garanties",
+      "critere_b": "delai_recuperation",
+      "jugement": "1"
+    },
+    {
+      "critere_a": "couverture_garanties",
+      "critere_b": "esg_score",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "couverture_garanties",
+      "critere_b": "emplois_par_million",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "dette_fonds_propres",
+      "critere_b": "delai_recuperation",
+      "jugement": "1"
+    },
+    {
+      "critere_a": "dette_fonds_propres",
+      "critere_b": "esg_score",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "dette_fonds_propres",
+      "critere_b": "emplois_par_million",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "delai_recuperation",
+      "critere_b": "esg_score",
+      "jugement": "1"
+    },
+    {
+      "critere_a": "delai_recuperation",
+      "critere_b": "emplois_par_million",
+      "jugement": "2"
+    },
+    {
+      "critere_a": "esg_score",
+      "critere_b": "emplois_par_million",
+      "jugement": "1"
+    }
+  ],
+  "filtre": [
+    {
+      "critere": "dscr_min",
+      "operateur": "<",
+      "seuil": 1.0,
+      "libelle": "DSCR minimum < 1"
+    },
+    {
+      "critere": "pd_ml",
+      "operateur": ">",
+      "seuil": 0.08,
+      "libelle": "probabilité de défaut > 8 %"
+    }
+  ],
+  "seuils": {
+    "q": 0.05,
+    "p": 0.2,
+    "v": 0.5
+  },
+  "coupure": 0.6,
+  "colonnes_info": [
+    "secteur",
+    "ville",
+    "montant_pret"
+  ]
+}

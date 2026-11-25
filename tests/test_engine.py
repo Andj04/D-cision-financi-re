@@ -40,6 +40,27 @@ def test_generic_dataset_and_config_roundtrip():
     assert engine.config_from_json(engine.config_to_json(cfg)) == json.loads(engine.config_to_json(cfg))
 
 
+def test_example_datasets():
+    d1 = engine.prepare_projects(pd.read_csv(EX / "test1_pme_casablanca.csv"))
+    c1 = engine.config_from_json((EX / "test1_configuration_ahp.json").read_text(encoding="utf-8"))
+    r1 = engine.evaluate(d1, c1, sensitivity=False)["results"]
+    assert r1["categorie_finale"].value_counts().to_dict() == {"Financer": 6, "Conditionner": 6, "Refuser": 3}
+    d2 = engine.prepare_projects(pd.read_csv(EX / "test2_prets_format_sba.csv"))   # pd_ml calculée par le modèle
+    assert "pd_ml" in d2 and d2["pd_ml"].between(0, 1).all() and d2["pd_ml"].nunique() > 3
+    d3 = engine.prepare_projects(pd.read_excel(EX / "test3_projets_energie.xlsx"))
+    sens = {c["colonne"]: c["sens"] for c in engine.guess_config(d3)["criteres"]}
+    assert sens["cout_par_mw_mdh"] == sens["risque_pays_note"] == sens["delai_construction_mois"] == "min"
+    assert sens["co2_evite_t_an"] == sens["rendement_tri_pct"] == "max"
+    d4 = engine.prepare_projects(pd.read_csv(EX / "test4_fichier_avec_erreurs.csv"))
+    errs = engine.validate(d4, engine.guess_config(d4))
+    assert any("van" in e for e in errs) and any("dscr_min" in e for e in errs)
+
+
+def test_french_numbers():
+    p = engine.prepare_projects(pd.DataFrame({"nom": ["A", "B"], "van": ["1 234,5", "-200"], "risque": ["2,5 %", "4 %"]}))
+    assert p["van"].tolist() == [1234.5, -200.0] and p["risque"].tolist() == [2.5, 4.0]
+
+
 def test_guess_config_and_validation_errors():
     df = engine.prepare_projects(pd.DataFrame({"risque": [0.1, 0.2, 0.05], "rendement": [5, 3, 8], "montant": [1, 2, 3]}))
     cfg = engine.guess_config(df)

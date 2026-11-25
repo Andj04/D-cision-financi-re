@@ -111,6 +111,17 @@ def prepare_projects(df: pd.DataFrame) -> pd.DataFrame:
     from naming import human_names
     out = df.copy()
     out.columns = [str(c).strip() for c in out.columns]
+    # Nombres écrits à la française (« 1 234,5 », « 12,3 % ») : convertis si la colonne est très majoritairement
+    # numérique ; les quelques valeurs illisibles (« n.c. ») deviennent manquantes et sont signalées par validate().
+    for c in out.columns:
+        if c in ("id", "nom") or c in MODEL_COLUMNS or pd.api.types.is_numeric_dtype(out[c]):
+            continue
+        txt = out[c].astype("string").str.strip()
+        conv = pd.to_numeric(txt.str.replace(r"[\s  %]", "", regex=True).str.replace(",", ".", regex=False),
+                             errors="coerce")
+        filled = txt.notna() & (txt != "")
+        if filled.sum() and conv[filled].notna().mean() >= 0.75:
+            out[c] = conv.astype(float)
     if "id" not in out.columns:
         out.insert(0, "id", [f"P{i + 1:03d}" for i in range(len(out))])
     out["id"] = out["id"].astype(str)

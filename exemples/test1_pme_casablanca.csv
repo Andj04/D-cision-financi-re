@@ -1,0 +1,16 @@
+id,nom,secteur,ville,montant_pret,pd_ml,van,delai_recuperation,dscr_min,dette_fonds_propres,couverture_garanties,esg_score,emplois_par_million
+C01,Atelier Céramique Oulfa,Artisanat,Casablanca,900000,0.021,1250000,4.2,1.62,1.4,1.1,78,31.0
+C02,Coopérative Argan Tifawin,Agroalimentaire,Agadir,1500000,0.034,2100000,5.1,1.48,1.9,0.85,91,42.0
+C03,Transports Fret Bouskoura,Logistique,Bouskoura,4200000,0.056,3800000,6.8,1.21,3.1,1.3,38,9.5
+C04,Studio Numérique Maarif,Numérique,Casablanca,650000,0.018,1900000,2.9,1.95,0.9,0.2,72,55.0
+C05,Ferme Avicole Berrechid,Agriculture,Berrechid,2800000,0.072,650000,9.4,1.07,2.8,1.25,41,14.0
+C06,Pâtisserie Hay Hassani,Commerce,Casablanca,380000,0.029,210000,5.6,1.33,1.6,0.7,60,47.0
+C07,Clinique Vétérinaire Ain Sebaa,Santé,Casablanca,1100000,0.015,880000,6.1,1.41,1.2,0.95,68,18.0
+C08,Imprimerie Derb Sultan,Industrie,Casablanca,1700000,0.091,-150000,12.5,0.94,3.6,0.6,33,12.0
+C09,Garage Auto Sidi Maarouf,Services,Casablanca,520000,0.047,95000,8.7,1.12,2.4,1.05,45,25.0
+C10,École de Code Anfa,Éducation,Casablanca,750000,0.026,1050000,3.8,1.58,1.1,0.3,84,38.0
+C11,Conserverie Sardine Safi,Agroalimentaire,Safi,3500000,0.063,2900000,5.9,1.29,2.9,1.4,49,21.0
+C12,Hôtel Riad Mellah,Tourisme,Marrakech,5000000,0.082,4600000,7.5,1.18,3.4,1.55,55,16.0
+C13,Recyclage Plastique Mohammedia,Environnement,Mohammedia,2300000,0.039,1400000,6.4,1.36,2.2,0.9,95,27.0
+C14,Boutique Mode Gauthier,Commerce,Casablanca,300000,0.052,-40000,10.8,0.98,2.0,0.4,50,33.0
+C15,Laboratoire Analyses Bourgogne,Santé,Casablanca,1900000,0.019,1600000,4.9,1.71,1.3,1.15,63,15.0
