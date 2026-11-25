@@ -14,9 +14,14 @@ import numpy as np
 import pandas as pd
 
 from damodaran import industry_table
+from features import duree_classe
 
 ROOT = Path(__file__).resolve().parents[1]
-SEED = 2026
+SEED = 2026                  # graine du tirage des 40 prêts ET (par défaut) des indicateurs simulés
+# La durée exacte (TermInMonths) est altérée après l'octroi pour les prêts en défaut (durée non ronde : ~19 % de
+# défaut sur le test contre ~0,4 % pour une durée ronde). La simulation n'utilise donc que la TRANCHE de durée,
+# convertie en une durée standard (hypothèse d'équipe), pour rester indépendante de l'issue réelle.
+DUREE_STANDARD_ANS = {"<=60 mois": 5, "61-120 mois": 10, ">120 mois": 25}
 N_PROJECTS = 40
 DISPERSION = 0.20            # décision 7 : +/- 20 % autour de la valeur sectorielle (choix d'équipe, à tester)
 DEBT_SHARE = (0.50, 0.80)    # décision 11 : part financée par la dette
@@ -68,10 +73,14 @@ def damodaran_params() -> pd.DataFrame:
     return t[list(keep.values())].rename(columns={v: k for k, v in keep.items()})
 
 
-def simulate(test: pd.DataFrame, pd_ml: pd.Series, seed: int = SEED, n: int = N_PROJECTS) -> pd.DataFrame:
-    rng = np.random.default_rng(seed)
+def simulate(test: pd.DataFrame, pd_ml: pd.Series, seed: int = SEED, n: int = N_PROJECTS,
+             indicator_seed: int | None = None) -> pd.DataFrame:
+    """seed : tirage des prêts ; indicator_seed : tirage des indicateurs (par défaut = seed). Faire varier
+    indicator_seed seul garde les mêmes 40 prêts et mesure la sensibilité des résultats à la simulation."""
+    rng = np.random.default_rng(seed if indicator_seed is None else indicator_seed)
     dam = damodaran_params()
-    sample = test.sample(n=n, random_state=seed)          # décision 6 (la cible n'est pas utilisée plus bas)
+    test = test.drop(columns=["default_60m"], errors="ignore")   # la cible n'est même pas accessible ici
+    sample = test.sample(n=n, random_state=seed)          # décision 6
     # décision 9 : répartition exacte 20 % faibles / 60 % moyens / 20 % solides, ordre mélangé (graine fixe)
     bands = np.repeat(np.arange(len(DSCR_BANDS)), [int(round(b[1] * n)) for b in DSCR_BANDS])
     bands = rng.permutation(bands)
@@ -87,7 +96,7 @@ def simulate(test: pd.DataFrame, pd_ml: pd.Series, seed: int = SEED, n: int = N_
         disc = jit(p["cost_of_capital"])
         growth = jit(GROWTH_ASSUMPTION[sector])
         loan = float(r["GrossApproval"])
-        n_years = int(np.clip(round(r["TermInMonths"] / 12), 3, 30))
+        n_years = DUREE_STANDARD_ANS[duree_classe(pd.Series([r["TermInMonths"]])).iloc[0]]
         rate = float(r["InitialInterestRate"]) / 100 if pd.notna(r["InitialInterestRate"]) else jit(p["cost_of_debt"])
 
         d = rng.uniform(*DEBT_SHARE)                                  # décision 11
@@ -122,7 +131,7 @@ def simulate(test: pd.DataFrame, pd_ml: pd.Series, seed: int = SEED, n: int = N_
 
         jobs = float(r["JobsSupported"]) / (loan / 1e6)               # critère SBA réel
         rows.append({"loan_id": r["loan_id"], "secteur_naics2": naics2 or "inconnu", "secteur_damodaran": sector,
-                     "etat": r["BorrState"], "montant_pret": loan, "duree_annees": n_years,
+                     "etat": r["BorrState"], "montant_pret": loan, "duree_standard_annees": n_years,
                      "investissement": invest, "fonds_propres": equity, "taux_dette": rate,
                      "taux_actualisation": disc, "croissance_flux": growth, "categorie_dscr": DSCR_BANDS[band][0],
                      "categorie_esg": cls, "van": van, "delai_recuperation": payback, "dscr_min": dscr_min,

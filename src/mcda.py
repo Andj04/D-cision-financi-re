@@ -28,8 +28,8 @@ RI = {1: 0, 2: 0, 3: 0.58, 4: 0.90, 5: 1.12, 6: 1.24, 7: 1.32, 8: 1.41, 9: 1.45,
 
 # ----------------------------------------------------------------------------- AHP (décision 13)
 def ahp_matrix_from_targets(targets: dict[str, float]) -> pd.DataFrame:
-    """Matrice de comparaisons deux à deux (28 jugements pour 8 critères) : chaque rapport
-    de poids cible est arrondi à l'échelle de Saaty (1/9 ... 9). Les jugements sont donc des entrées explicites."""
+    """Matrice PROPOSÉE (point de départ seulement) : chaque rapport de poids cible est arrondi à l'échelle de
+    Saaty. Utilisée pour initialiser params/ahp_jugements.csv ; la matrice de travail est lue dans ce fichier."""
     names = list(targets)
     m = np.ones((len(names), len(names)))
     for i, a in enumerate(names):
@@ -38,6 +38,31 @@ def ahp_matrix_from_targets(targets: dict[str, float]) -> pd.DataFrame:
             v = SAATY[np.argmin(np.abs(np.log(SAATY) - np.log(r)))]
             m[i, j], m[j, i] = v, 1 / v
     return pd.DataFrame(m, index=names, columns=names)
+
+
+def judgments_table(matrix: pd.DataFrame) -> pd.DataFrame:
+    """Matrice -> 28 jugements lisibles (critère A, critère B, importance de A par rapport à B, échelle 1/9..9)."""
+    names, rows = list(matrix.index), []
+    for i, a in enumerate(names):
+        for b in names[i + 1:]:
+            v = float(matrix.loc[a, b])
+            rows.append({"critere_a": a, "critere_b": b,
+                         "jugement": f"{v:g}" if v >= 1 else f"1/{round(1 / v):d}"})
+    return pd.DataFrame(rows)
+
+
+def ahp_matrix_from_judgments(table: pd.DataFrame, names: list[str] | None = None) -> pd.DataFrame:
+    """Reconstruit la matrice réciproque à partir des jugements (« 3 » ou « 1/3 »), contrôle l'échelle de Saaty."""
+    names = names or list(dict.fromkeys(list(table["critere_a"]) + list(table["critere_b"])))
+    m = pd.DataFrame(np.ones((len(names), len(names))), index=names, columns=names)
+    for _, r in table.iterrows():
+        s = str(r["jugement"]).strip()
+        v = 1 / float(s.split("/")[1]) if s.startswith("1/") else float(s)
+        assert np.isclose(SAATY, v).any(), f"jugement hors échelle de Saaty : {s}"
+        m.loc[r["critere_a"], r["critere_b"]], m.loc[r["critere_b"], r["critere_a"]] = v, 1 / v
+    n_expected = len(names) * (len(names) - 1) // 2
+    assert len(table) == n_expected, f"{len(table)} jugements au lieu de {n_expected}"
+    return m
 
 
 def ahp_weights(matrix: pd.DataFrame) -> tuple[pd.Series, float, float]:
@@ -54,15 +79,20 @@ def ahp_weights(matrix: pd.DataFrame) -> tuple[pd.Series, float, float]:
 
 
 # ----------------------------------------------------------------------------- filtre (décision 14)
-def eliminatory_filter(scores: pd.DataFrame, train_default_rate: float, dscr_floor: float = 1.0,
+def eliminatory_filter(scores: pd.DataFrame, reference_rate: float, dscr_floor: float = 1.0,
                        pd_multiple: float = 2.0) -> pd.DataFrame:
-    """Écarte un projet si DSCR min < 1 ou pd_ml > 2 x taux de défaut moyen de l'entraînement."""
+    """Écarte un projet si DSCR min < 1 ou pd_ml > 2 x taux de défaut de référence.
+
+    Le taux de référence doit être celui du régime sur lequel pd_ml est calibrée (validation 2013-2014) :
+    comparer une probabilité calibrée sur 2013-2014 au taux 2000-2012 (crise de 2008, 13,5 %) rendrait le
+    filtre inopérant (seuil de 27 % jamais atteint)."""
     out = scores.copy()
     out["motif_ecarte"] = ""
     out.loc[out["dscr_min"] < dscr_floor, "motif_ecarte"] = f"DSCR minimum < {dscr_floor:g}"
-    high = out["pd_ml"] > pd_multiple * train_default_rate
+    high = out["pd_ml"] > pd_multiple * reference_rate
     out.loc[high, "motif_ecarte"] = (out.loc[high, "motif_ecarte"].where(out.loc[high, "motif_ecarte"] == "", out.loc[high, "motif_ecarte"] + " ; ")
-                                     + f"pd_ml > {pd_multiple:g} x taux de défaut moyen ({train_default_rate:.3f})")
+                                     + f"probabilité de défaut > {pd_multiple:g} x taux de référence "
+                                       f"({100 * pd_multiple * reference_rate:.1f} %)")
     out["ecarte"] = out["motif_ecarte"] != ""
     return out
 
@@ -149,22 +179,54 @@ def electre_iii(perf: np.ndarray, w: np.ndarray, th: Thresholds) -> dict:
     order = np.lexsort((-net, mean_rank))
     final = np.empty(n, dtype=int)
     final[order] = np.arange(1, n + 1)
+    # Le rang final est un ordre TOTAL de lecture (moyenne des deux distillations, ex aequo départagés par la
+    # crédibilité nette). Les deux préordres sont aussi renvoyés : un écart important entre eux signale un projet
+    # INCOMPARABLE à une partie des autres (information propre à ELECTRE III, à ne pas masquer).
     return {"sigma": sigma, "rank_desc": rank_d, "rank_asc": rank_a, "rank": final, "net_credibility": net}
 
 
 # ----------------------------------------------------------------------------- ELECTRE TRI (décision 16)
-def make_profiles(df: pd.DataFrame, dscr_profiles=(1.0, 1.25)) -> np.ndarray:
-    """Profils limites (refuser|conditionner, conditionner|financer) : DSCR 1,0 et 1,25 ; sinon tertiles 33e/66e centile."""
-    rows = []
-    for k, qtile in enumerate((1 / 3, 2 / 3)):
-        row = []
-        for c in CRITERIA:
-            if c == "dscr_min":
-                row.append(SENSE[c] * dscr_profiles[k])
-            else:
-                row.append(SENSE[c] * np.quantile(df[c].to_numpy(float), qtile if SENSE[c] > 0 else 1 - qtile))
-        rows.append(row)
-    return np.array(rows)
+# Profils limites b1 (Refuser | Conditionner) et b2 (Conditionner | Financer).
+# Repères ABSOLUS quand il en existe un (la catégorie ne dépend alors pas du lot de projets) ; sinon tertiles
+# du lot (relatif, signalé). « ref » = taux de défaut de référence (régime de calibration de pd_ml).
+PROFILE_SPEC = {
+    "pd_ml": ("absolu", lambda ref: (1.5 * ref, 1.0 * ref),
+              "1,5 x puis 1 x le taux de défaut de référence (validation 2013-2014)"),
+    "van": ("mixte", None, "b1 = 0 $ (le projet crée de la valeur) ; b2 = 66e centile du lot"),
+    "delai_recuperation": ("mixte", None, "b1 = 10 ans (horizon explicite de la simulation) ; b2 = 33e centile du lot"),
+    "dscr_min": ("absolu", lambda ref: (1.0, 1.25), "1,0 (flux = service de la dette) et 1,25 (repère du guide)"),
+    "dette_fonds_propres": ("absolu", lambda ref: (3.0, 1.5),
+                            "3,0 (75 % de dette) et 1,5 (60 % de dette) : hypothèse d'équipe"),
+    "couverture_garanties": ("absolu", lambda ref: (0.5, 1.0),
+                             "les garanties couvrent la moitié (0,5) puis la totalité (1,0) du prêt"),
+    "esg_score": ("absolu", lambda ref: (50.0, 70.0), "50 et 70 : entre les centres des classes A/B/C (30/60/85)"),
+    "emplois_par_million": ("relatif", None, "33e et 66e centiles du lot (aucun repère externe)"),
+}
+
+
+def make_profiles(df: pd.DataFrame, reference_rate: float) -> tuple[np.ndarray, pd.DataFrame]:
+    """Renvoie (profils orientés 2 x 8, table lisible des profils en unités d'origine)."""
+    def q(c, qt):
+        return float(np.quantile(df[c].to_numpy(float), qt))
+
+    raw = {}
+    for c in CRITERIA:
+        kind, fn, _ = PROFILE_SPEC[c]
+        if kind == "absolu":
+            raw[c] = fn(reference_rate)
+        elif c == "van":
+            raw[c] = (0.0, max(0.0, q(c, 2 / 3)))
+        elif c == "delai_recuperation":
+            raw[c] = (10.0, min(10.0, q(c, 1 / 3)))
+        else:
+            raw[c] = (q(c, 1 / 3), q(c, 2 / 3))
+    prof = np.array([[SENSE[c] * raw[c][k] for c in CRITERIA] for k in (0, 1)])
+    prof[1] = np.maximum(prof[1], prof[0])            # b2 doit dominer b1 (sens « plus grand = meilleur »)
+    table = pd.DataFrame({"critere": CRITERIA, "type": [PROFILE_SPEC[c][0] for c in CRITERIA],
+                          "b1_refuser_conditionner": [SENSE[c] * prof[0, j] for j, c in enumerate(CRITERIA)],
+                          "b2_conditionner_financer": [SENSE[c] * prof[1, j] for j, c in enumerate(CRITERIA)],
+                          "justification": [PROFILE_SPEC[c][2] for c in CRITERIA]})
+    return prof, table
 
 
 def electre_tri(perf: np.ndarray, profiles: np.ndarray, w: np.ndarray, th: Thresholds, cut: float = 0.6) -> dict:
@@ -210,23 +272,26 @@ class McdaConfig:
     cut: float = 0.6
 
 
-def run_mcda(scores: pd.DataFrame, weights: pd.Series, train_default_rate: float,
+def run_mcda(scores: pd.DataFrame, weights: pd.Series, reference_rate: float,
              cfg: McdaConfig = McdaConfig(), filter_first: bool = True) -> pd.DataFrame:
     """Applique filtre -> ELECTRE III + ELECTRE TRI + PROMETHEE II sur les survivants."""
-    df = eliminatory_filter(scores, train_default_rate) if filter_first else scores.assign(ecarte=False, motif_ecarte="")
+    df = eliminatory_filter(scores, reference_rate) if filter_first else scores.assign(ecarte=False, motif_ecarte="")
     alive = df[~df["ecarte"]]
     w = weights.reindex(CRITERIA).to_numpy(float)
     perf = oriented(alive)
     th = make_thresholds(perf, cfg.q_pct, cfg.p_pct, cfg.v_pct)
     e3 = electre_iii(perf, w, th)
-    tri = electre_tri(perf, make_profiles(alive), w, th, cfg.cut)
+    tri = electre_tri(perf, make_profiles(alive, reference_rate)[0], w, th, cfg.cut)
     pm = promethee_ii(perf, w, th)
     out = df.copy()
-    for col in ["rang_electre3", "rang_promethee2", "flux_net_promethee", "credibilite_nette"]:
+    for col in ["rang_electre3", "rang_distillation_descendante", "rang_distillation_ascendante",
+                "rang_promethee2", "flux_net_promethee", "credibilite_nette"]:
         out[col] = np.nan
     out["categorie_tri_pessimiste"] = pd.Series([None] * len(out), index=out.index, dtype=object)
     out["categorie_tri_optimiste"] = pd.Series([None] * len(out), index=out.index, dtype=object)
     out.loc[alive.index, "rang_electre3"] = e3["rank"]
+    out.loc[alive.index, "rang_distillation_descendante"] = e3["rank_desc"]
+    out.loc[alive.index, "rang_distillation_ascendante"] = e3["rank_asc"]
     out.loc[alive.index, "credibilite_nette"] = e3["net_credibility"]
     out.loc[alive.index, "categorie_tri_pessimiste"] = [CATEGORIES[i] for i in tri["pessimiste"]]
     out.loc[alive.index, "categorie_tri_optimiste"] = [CATEGORIES[i] for i in tri["optimiste"]]
@@ -238,9 +303,13 @@ def run_mcda(scores: pd.DataFrame, weights: pd.Series, train_default_rate: float
 
 
 # ----------------------------------------------------------------------------- sensibilité
-def sensitivity(scores: pd.DataFrame, weights: pd.Series, train_default_rate: float, seed: int = 7,
+LAMBDA_RANGE = (0.5, 0.8)   # coupure plausible pour les scénarios combinés ; 0,9-1 (quasi-unanimité) n'est
+                            # montré que dans le tableau « un paramètre à la fois », comme cas extrême
+
+
+def sensitivity(scores: pd.DataFrame, weights: pd.Series, reference_rate: float, seed: int = 7,
                 n_weight_draws: int = 200) -> dict[str, pd.DataFrame]:
-    base = run_mcda(scores, weights, train_default_rate)
+    base = run_mcda(scores, weights, reference_rate)
     alive_idx = base.index[~base["ecarte"]]
     base_rank = base.loc[alive_idx, "rang_electre3"]
     base_cat = base["categorie_tri_pessimiste"]
@@ -254,27 +323,30 @@ def sensitivity(scores: pd.DataFrame, weights: pd.Series, train_default_rate: fl
     rows = []
     for q, p, v in [(0.03, 0.15, 0.40), (0.05, 0.20, 0.50), (0.10, 0.30, 0.60), (0.05, 0.20, 0.80)]:
         rows.append({"parametre": "seuils q/p/v", "valeur": f"{q:.0%}/{p:.0%}/{v:.0%}",
-                     **compare(run_mcda(scores, weights, train_default_rate, McdaConfig(q, p, v, 0.6)))})
+                     **compare(run_mcda(scores, weights, reference_rate, McdaConfig(q, p, v, 0.6)))})
     # (b) niveau de coupure lambda
     for cut in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
         rows.append({"parametre": "coupure lambda", "valeur": f"{cut:g}",
-                     **compare(run_mcda(scores, weights, train_default_rate, McdaConfig(cut=cut)))})
+                     **compare(run_mcda(scores, weights, reference_rate, McdaConfig(cut=cut)))})
     table = pd.DataFrame(rows)
 
-    # (c) scénarios combinés : poids +/-30 %, seuils q/p/v et coupure lambda tirés dans les fourchettes testées
+    # (c) scénarios combinés : poids +/-30 %, seuils q/p/v et coupure lambda dans [0,5 ; 0,8]
     rng = np.random.default_rng(seed)
     cats, ranks = [], []
     for _ in range(n_weight_draws):
         w = weights * rng.uniform(0.7, 1.3, len(weights))
         cfg = McdaConfig(q_pct=rng.uniform(0.03, 0.10), p_pct=rng.uniform(0.15, 0.30),
-                         v_pct=rng.uniform(0.40, 0.80), cut=rng.uniform(0.5, 1.0))
-        res = run_mcda(scores, w / w.sum(), train_default_rate, cfg)
+                         v_pct=rng.uniform(0.40, 0.80), cut=rng.uniform(*LAMBDA_RANGE))
+        res = run_mcda(scores, w / w.sum(), reference_rate, cfg)
         cats.append(res["categorie_tri_pessimiste"].to_numpy())
         ranks.append(res["rang_electre3"].to_numpy())
-    cats, ranks = np.array(cats), np.array(ranks)
+    cats, ranks = np.array(cats), np.array(ranks, dtype=float)
+    ranked = ~np.isnan(ranks).all(axis=0)              # projets écartés : jamais classés -> rang NaN
+    rmean, rstd = np.full(ranks.shape[1], np.nan), np.full(ranks.shape[1], np.nan)
+    rmean[ranked], rstd[ranked] = np.nanmean(ranks[:, ranked], axis=0), np.nanstd(ranks[:, ranked], axis=0)
     frag = pd.DataFrame({
         "part_scenarios_categorie_differente": (cats != base_cat.to_numpy()).mean(axis=0),
-        "rang_moyen": np.nanmean(ranks, axis=0), "rang_ecart_type": np.nanstd(ranks, axis=0),
+        "rang_moyen": rmean, "rang_ecart_type": rstd,
     }, index=base.index)
     frag["decision_fragile"] = frag["part_scenarios_categorie_differente"] >= 0.25
 

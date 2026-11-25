@@ -1,0 +1,8 @@
+{
+  "dscr_min_plancher": 1.0,
+  "taux_defaut_reference": 0.035674402796659545,
+  "multiple": 2.0,
+  "seuil_pd": 0.07134880559331909,
+  "source_taux": "validation 2013-2014 (régime de calibration de pd_ml)",
+  "taux_entrainement_non_utilise": 0.13477958663079362
+}

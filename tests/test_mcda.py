@@ -42,5 +42,28 @@ def test_ahp_target_weights_consistent():
 
 def test_filter():
     df = pd.DataFrame({"dscr_min": [0.9, 1.2, 1.5], "pd_ml": [0.05, 0.40, 0.05]})
-    out = mcda.eliminatory_filter(df, train_default_rate=0.13)
+    out = mcda.eliminatory_filter(df, reference_rate=0.13)
     assert out["ecarte"].tolist() == [True, True, False]
+
+
+def test_filter_uses_reference_rate():
+    # pd_ml = 9 % : écarté avec le taux de validation (3,6 % -> seuil 7,1 %), pas avec celui de 2000-2012 (27 %)
+    df = pd.DataFrame({"dscr_min": [1.2], "pd_ml": [0.09]})
+    assert mcda.eliminatory_filter(df, reference_rate=0.0357)["ecarte"].iloc[0]
+    assert not mcda.eliminatory_filter(df, reference_rate=0.1348)["ecarte"].iloc[0]
+
+
+def test_ahp_judgments_roundtrip():
+    m = mcda.ahp_matrix_from_targets(mcda.TARGET_WEIGHTS)
+    table = mcda.judgments_table(m)
+    assert len(table) == 28
+    m2 = mcda.ahp_matrix_from_judgments(table, list(m.index))
+    assert np.allclose(m.values, m2.values)
+
+
+def test_profiles_ordered():
+    rng = np.random.default_rng(0)
+    df = pd.DataFrame({c: rng.uniform(0.5, 5, 30) for c in mcda.CRITERIA})
+    prof, table = mcda.make_profiles(df, reference_rate=0.036)
+    assert prof.shape == (2, 8) and (prof[1] >= prof[0]).all()       # b2 domine b1
+    assert table.set_index("critere").loc["dscr_min", "b2_conditionner_financer"] == 1.25

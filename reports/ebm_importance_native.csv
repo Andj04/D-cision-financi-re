@@ -1,18 +1,24 @@
 terme,importance_native
-procedure,0.846515959215778
-duree_classe,0.580020423260995
-taux_initial,0.5625751872178023
-etat,0.43513223614462687
-age_entreprise,0.3382125231886546
-type_entreprise,0.26492615061603614
-taux_fixe_variable,0.25757113458299574
-taux_manquant,0.19228472586687687
-log_montant,0.18363764403650346
-secteur_naics2,0.17867064436538357
-garantie_reelle,0.11648867281248006
-duree_classe & procedure,0.11085552941132121
-part_garantie,0.10010537455311835
-part_garantie & duree_classe,0.0880393612308773
-ligne_renouvelable,0.05997741877589112
-duree_classe & ligne_renouvelable,0.057068816778288865
-franchise,0.04301702645595311
+procedure,0.8597078606411438
+duree_classe,0.5836316095848669
+taux_initial,0.5064417448816317
+etat,0.4275242427622108
+age_entreprise,0.37216412544202
+type_entreprise,0.2729729598565136
+taux_fixe_variable,0.25304716612825207
+log_montant & age_entreprise,0.21611563740717396
+secteur_naics2,0.17308023737964412
+log_montant & procedure,0.17106495905368793
+taux_manquant,0.1685333062916225
+log_montant,0.14508407760098824
+log_montant & part_garantie,0.1236932453928271
+ligne_renouvelable & age_entreprise,0.10618143916686358
+part_garantie,0.09696186229907665
+log_montant & duree_classe,0.08960472231216118
+log_montant & ligne_renouvelable,0.08481747066568149
+duree_classe & procedure,0.08441402986057005
+duree_classe & age_entreprise,0.07849518969750642
+ligne_renouvelable,0.06296334955562952
+part_garantie & duree_classe,0.05833532932586291
+duree_classe & ligne_renouvelable,0.057985314842921784
+franchise,0.036077403168235385

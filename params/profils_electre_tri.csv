@@ -1,0 +1,9 @@
+critere,type,b1_refuser_conditionner,b2_conditionner_financer,justification
+pd_ml,absolu,0.05351160419498932,0.035674402796659545,"1,5 x puis 1 x le taux de défaut de référence (validation 2013-2014)"
+van,mixte,0.0,85353.49288021454,b1 = 0 $ (le projet crée de la valeur) ; b2 = 66e centile du lot
+delai_recuperation,mixte,10.0,6.48498288647963,b1 = 10 ans (horizon explicite de la simulation) ; b2 = 33e centile du lot
+dscr_min,absolu,1.0,1.25,"1,0 (flux = service de la dette) et 1,25 (repère du guide)"
+dette_fonds_propres,absolu,3.0,1.5,"3,0 (75 % de dette) et 1,5 (60 % de dette) : hypothèse d'équipe"
+couverture_garanties,absolu,0.5,1.0,"les garanties couvrent la moitié (0,5) puis la totalité (1,0) du prêt"
+esg_score,absolu,50.0,70.0,50 et 70 : entre les centres des classes A/B/C (30/60/85)
+emplois_par_million,relatif,15.634043552220795,53.999999999999986,33e et 66e centiles du lot (aucun repère externe)

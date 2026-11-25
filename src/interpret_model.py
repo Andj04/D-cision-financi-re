@@ -1,4 +1,8 @@
-"""Étape 4 : interprétabilité du modèle retenu (EBM) : explications natives, permutation, erreurs, explications locales."""
+"""Étape 4 : interprétabilité du modèle retenu (EBM) : explications natives, permutation, erreurs, explications locales.
+
+Règle « test lu une seule fois » : la permutation et l'analyse d'erreurs se font sur la VALIDATION (2013-2014).
+Le test ne sert ici qu'aux explications locales des 40 projets, qui sont des prêts du test (aucune métrique).
+"""
 from pathlib import Path
 
 import joblib
@@ -33,7 +37,7 @@ def permutation_importance(predict, X, y, n_repeats=5, max_rows=30000):
 def main():
     art = joblib.load(ROOT / "models/risk_models.joblib")
     ebm, iso = art["ebm"], art["calibrators"]["ebm"]
-    Xte, yte, ids = load_split("test")
+    Xva, yva, _ = load_split("val")
     pred = lambda X: ebm.predict_proba(X)[:, 1]  # noqa: E731
 
     # 1. importances natives de l'EBM (contribution absolue moyenne par terme, échelle log-odds)
@@ -41,13 +45,13 @@ def main():
                         ).sort_values("importance_native", ascending=False)
     glob.to_csv(REP / "ebm_importance_native.csv", index=False)
 
-    # 2. permutation sur le jeu de test (modèle retenu)
-    perm, base = permutation_importance(pred, Xte, yte.values)
-    perm.to_csv(REP / "permutation_importance_test.csv", index=False)
+    # 2. permutation sur la validation (modèle retenu)
+    perm, base = permutation_importance(pred, Xva, yva.values)
+    perm.to_csv(REP / "permutation_importance_validation.csv", index=False)
     fig, ax = plt.subplots(1, 2, figsize=(12, 5))
     g = glob.head(12)[::-1]; ax[0].barh(g.terme, g.importance_native); ax[0].set_title("EBM : importance native (|log-odds| moyen)")
     p = perm.head(12)[::-1]; ax[1].barh(p.variable, p.baisse_AUROC_moyenne, xerr=p.ecart_type)
-    ax[1].set_title(f"Permutation sur le test (AUROC de base {base:.3f})"); fig.tight_layout()
+    ax[1].set_title(f"Permutation sur la validation (AUROC de base {base:.3f})"); fig.tight_layout()
     fig.savefig(REP / "importance_variables.png", dpi=130)
 
     # 3. courbes de forme de l'EBM pour les 4 variables les plus importantes (effet de chaque variable)
@@ -63,10 +67,10 @@ def main():
         ax_.set_title(f"Effet : {term}"); ax_.set_ylabel("log-odds")
     fig.tight_layout(); fig.savefig(REP / "ebm_effets.png", dpi=130)
 
-    # 4. analyse des erreurs sur le test (secteur, État, procédure) : défauts réels vs prédits, seuil F1 du modèle
-    p_cal = iso.predict(pred(Xte)); thr = art["seuil_F1"]["ebm"]
-    df = pd.DataFrame({"secteur": Xte.secteur_naics2.values, "etat": Xte.etat.values, "procedure": Xte.procedure.values,
-                       "y": yte.values, "pd": p_cal, "pred": (p_cal >= thr).astype(int)})
+    # 4. analyse des erreurs sur la validation (secteur, État, procédure) : défauts réels vs prédits, seuil F1
+    p_cal = iso.predict(pred(Xva)); thr = art["seuil_F1"]["ebm"]
+    df = pd.DataFrame({"secteur": Xva.secteur_naics2.values, "etat": Xva.etat.values, "procedure": Xva.procedure.values,
+                       "y": yva.values, "pd": p_cal, "pred": (p_cal >= thr).astype(int)})
     out = []
     for dim in ["secteur", "etat", "procedure"]:
         g = df.groupby(dim).agg(n=("y", "size"), defauts_reels=("y", "sum"), pd_moyenne=("pd", "mean"),
@@ -77,9 +81,10 @@ def main():
         g["taux_faux_negatifs"] = g.fn / g.defauts_reels.replace(0, np.nan)
         g.insert(0, "dimension", dim); g = g.rename(columns={dim: "modalite"}); out.append(g[g.n >= 300])
     err = pd.concat(out).sort_values(["dimension", "n"], ascending=[True, False])
-    err.to_csv(REP / "erreurs_par_segment_test.csv", index=False)
+    err.to_csv(REP / "erreurs_par_segment_validation.csv", index=False)
 
-    # 5. explications locales pour chaque prêt du test pd_ml déjà exporté : 3 facteurs qui augmentent le plus le risque
+    # 5. explications locales des 40 projets (prêts du test) : 3 facteurs qui augmentent le plus le risque
+    Xte, _, ids = load_split("test")
     scores = pd.read_csv(ROOT / "data/processed/project_scores.csv")
     sel = Xte[ids.isin(scores.loan_id).values]; sel_ids = ids[ids.isin(scores.loan_id).values].values
     contrib = ebm.eval_terms(sel)

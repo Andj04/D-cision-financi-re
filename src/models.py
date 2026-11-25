@@ -58,14 +58,30 @@ def main():
     ytr, yva = ytr.values, yva.values
     print(f"train {Xtr.shape} défaut {ytr.mean():.4f} | val {Xva.shape} défaut {yva.mean():.4f}", flush=True)
 
-    t = time.time()
-    logreg = Pipeline([("prep", logreg_preprocessor()),
-                       ("clf", LogisticRegression(max_iter=2000, C=1.0, random_state=SEED))]).fit(Xtr, ytr)
-    print(f"logreg fit {time.time()-t:.0f}s", flush=True)
-    t = time.time()
-    ebm = ExplainableBoostingClassifier(interactions=3, max_rounds=1000, learning_rate=0.05, outer_bags=4,
-                                        random_state=SEED, n_jobs=-1).fit(Xtr, ytr)
-    print(f"EBM fit {time.time()-t:.0f}s", flush=True)
+    # --- petit réglage des hyperparamètres : chaque candidat est ajusté sur train et jugé sur l'AUROC de validation
+    #     (le test n'intervient pas). Grille volontairement courte (coût de l'EBM sur 720 000 lignes).
+    grid, cands = [], {"logreg": [], "ebm": []}
+    for C in [0.01, 0.1, 1.0, 10.0]:
+        t = time.time()
+        m = Pipeline([("prep", logreg_preprocessor()),
+                      ("clf", LogisticRegression(max_iter=2000, C=C, random_state=SEED))]).fit(Xtr, ytr)
+        auc = roc_auc_score(yva, m.predict_proba(Xva)[:, 1])
+        grid.append({"modele": "logreg", "hyperparametres": f"C={C:g}", "AUROC_val_brut": auc, "duree_s": time.time() - t})
+        cands["logreg"].append((auc, m))
+        print(grid[-1], flush=True)
+    for cfg in [dict(interactions=3, learning_rate=0.05), dict(interactions=10, learning_rate=0.05)]:
+        t = time.time()
+        m = ExplainableBoostingClassifier(max_rounds=1000, outer_bags=4, random_state=SEED, n_jobs=-1, **cfg).fit(Xtr, ytr)
+        auc = roc_auc_score(yva, m.predict_proba(Xva)[:, 1])
+        grid.append({"modele": "ebm", "hyperparametres": ", ".join(f"{k}={v}" for k, v in cfg.items()),
+                     "AUROC_val_brut": auc, "duree_s": time.time() - t})
+        cands["ebm"].append((auc, m))
+        print(grid[-1], flush=True)
+    g = pd.DataFrame(grid)
+    g["retenu"] = g.groupby("modele")["AUROC_val_brut"].transform("max") == g["AUROC_val_brut"]
+    g.to_csv(ROOT / "reports/reglage_hyperparametres.csv", index=False)
+    logreg = max(cands["logreg"], key=lambda x: x[0])[1]
+    ebm = max(cands["ebm"], key=lambda x: x[0])[1]
 
     raw = {"logreg": logreg.predict_proba(Xva)[:, 1], "ebm": ebm.predict_proba(Xva)[:, 1]}
     rows, cal_val, calibrators = [], {}, {}
@@ -116,7 +132,10 @@ def main():
                 ROOT / "models/risk_models.joblib", compress=3)
     (ROOT / "reports/modele_retenu.json").write_text(json.dumps(
         {"modele_retenu": chosen, "critere": "Brier calibré le plus bas sur validation",
-         "taux_defaut_train": float(ytr.mean())}, indent=2), encoding="utf-8")
+         "taux_defaut_train": float(ytr.mean()), "taux_defaut_validation": float(yva.mean()),
+         "remarque": "pd_ml est calibrée sur la validation : le taux de référence cohérent pour le filtre est celui "
+                     "de la validation (le taux d'entraînement inclut la crise de 2008)."}, indent=2, ensure_ascii=False),
+        encoding="utf-8")
 
 
 if __name__ == "__main__":

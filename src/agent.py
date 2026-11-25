@@ -17,7 +17,7 @@ import re
 import urllib.error
 import urllib.request
 
-DEFAULT_MODELS = {"gemini": "gemini-2.0-flash", "groq": "llama-3.3-70b-versatile"}
+DEFAULT_MODELS = {"gemini": "gemini-2.5-flash", "groq": "llama-3.3-70b-versatile"}
 
 SYSTEM_PROMPT = (
     "Tu es l'agent rédacteur d'un comité d'investissement bancaire. Tu rédiges en français une note courte "
@@ -119,44 +119,55 @@ def _post(url: str, payload: dict, headers: dict) -> dict:
         return json.loads(r.read().decode("utf-8"))
 
 
-def call_llm(prompt: str, system: str = SYSTEM_PROMPT) -> str | None:
-    """Renvoie le texte du LLM, ou None si pas de clé / erreur (la clé n'est jamais journalisée)."""
+def call_llm(prompt: str, system: str = SYSTEM_PROMPT) -> tuple[str | None, str]:
+    """Renvoie (texte du LLM ou None, diagnostic lisible). La clé n'est jamais journalisée ni renvoyée."""
     provider = (_secret("LLM_PROVIDER") or "gemini").lower()
     model = _secret("LLM_MODEL") or DEFAULT_MODELS.get(provider, "")
     try:
         if provider == "gemini":
             key = _secret("GEMINI_API_KEY")
             if not key:
-                return None
+                return None, "pas de clé GEMINI_API_KEY dans les secrets"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
             out = _post(url, {"system_instruction": {"parts": [{"text": system}]},
                               "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-                              "generationConfig": {"temperature": 0.2, "maxOutputTokens": 600}},
+                              # budget large : les modèles « 2.5 » consomment aussi des jetons de réflexion
+                              "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048}},
                         {"Content-Type": "application/json", "x-goog-api-key": key})
-            return out["candidates"][0]["content"]["parts"][0]["text"].strip()
+            parts = out["candidates"][0]["content"].get("parts", [])
+            text = "".join(p.get("text", "") for p in parts).strip()
+            return (text or None), (f"Gemini {model}" if text else f"réponse vide de Gemini {model}")
         if provider == "groq":
             key = _secret("GROQ_API_KEY")
             if not key:
-                return None
+                return None, "pas de clé GROQ_API_KEY dans les secrets"
             out = _post("https://api.groq.com/openai/v1/chat/completions",
-                        {"model": model, "temperature": 0.2, "max_tokens": 600,
+                        {"model": model, "temperature": 0.2, "max_tokens": 900,
                          "messages": [{"role": "system", "content": system}, {"role": "user", "content": prompt}]},
                         {"Content-Type": "application/json", "Authorization": f"Bearer {key}"})
-            return out["choices"][0]["message"]["content"].strip()
-    except (urllib.error.URLError, KeyError, IndexError, json.JSONDecodeError, TimeoutError):
-        return None
-    return None
+            return out["choices"][0]["message"]["content"].strip(), f"Groq {model}"
+        return None, f"fournisseur inconnu : {provider}"
+    except urllib.error.HTTPError as e:            # ex. 400 clé invalide, 404 modèle inconnu, 429 quota
+        try:
+            msg = json.loads(e.read().decode("utf-8")).get("error", {}).get("message", "")[:160]
+        except Exception:
+            msg = ""
+        return None, f"erreur HTTP {e.code} du fournisseur ({model}) {msg}".strip()
+    except (urllib.error.URLError, TimeoutError) as e:
+        return None, f"réseau indisponible ({type(e).__name__})"
+    except (KeyError, IndexError, json.JSONDecodeError) as e:
+        return None, f"réponse inattendue du fournisseur ({type(e).__name__})"
 
 
 def write_note(row: dict) -> dict:
     """Note pour un projet : LLM si disponible ET vérifiée, sinon gabarit. Renvoie texte, source, contrôle."""
     facts = build_facts(row)
     prompt = "FAITS (à recopier tels quels, aucun autre chiffre autorisé) :\n" + facts_to_text(facts)
-    llm = call_llm(prompt)
+    llm, diag = call_llm(prompt)
     if llm:
         ok, bad = verify_note(llm, facts)
         if ok:
-            return {"note": llm, "source": "LLM", "verification": "tous les chiffres correspondent aux faits"}
+            return {"note": llm, "source": f"LLM ({diag})", "verification": "tous les chiffres correspondent aux faits"}
         return {"note": template_note(facts), "source": "gabarit",
                 "verification": f"note du LLM rejetée (chiffres hors faits : {', '.join(bad)})"}
-    return {"note": template_note(facts), "source": "gabarit", "verification": "pas de clé API ou LLM indisponible"}
+    return {"note": template_note(facts), "source": "gabarit", "verification": f"LLM non utilisé : {diag}"}

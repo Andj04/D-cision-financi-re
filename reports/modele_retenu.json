@@ -1,5 +1,7 @@
 {
   "modele_retenu": "ebm",
-  "critere": "Brier calibr\u00e9 le plus bas sur validation",
-  "taux_defaut_train": 0.13477958663079362
+  "critere": "Brier calibré le plus bas sur validation",
+  "taux_defaut_train": 0.13477958663079362,
+  "taux_defaut_validation": 0.035674402796659545,
+  "remarque": "pd_ml est calibrée sur la validation : le taux de référence cohérent pour le filtre est celui de la validation (le taux d'entraînement inclut la crise de 2008)."
 }
