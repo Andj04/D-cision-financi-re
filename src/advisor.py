@@ -29,7 +29,9 @@ SYSTEM = (
     "1. Tout chiffre que tu cites doit venir d'un outil appelé dans cette conversation. Tu n'effectues AUCUN calcul "
     "toi-même (pas de moyenne, somme, différence, pourcentage, arrondi) : si un calcul est nécessaire, appelle l'outil "
     "« statistiques », « simuler_scenario » ou « comparer_projets ».\n"
-    "2. Avant de répondre sur un projet, appelle « fiche_projet » ; sur l'ensemble des résultats, « resume_resultats ».\n"
+    "2. Avant de répondre sur un projet, appelle « fiche_projet » ; sur l'ensemble des résultats, « resume_resultats ». "
+    "Pour un projet SOUS UN SCÉNARIO (autres poids, autre λ, sans filtre), appelle « fiche_projet » AVEC ces paramètres : "
+    "il recalcule la catégorie, les rangs et la fragilité du projet dans ce scénario. Écris les nombres en chiffres.\n"
     "3. Désigne les projets par leur nom. Si une information n'est disponible dans aucun outil, dis-le simplement.\n"
     "4. Signale la fragilité d'une décision quand elle est pertinente. Dans la démonstration, seuls les indicateurs "
     "financiers (VAN, délai, DSCR, dette, garanties, ESG) sont simulés ; la probabilité de défaut vient d'un modèle "
@@ -60,6 +62,8 @@ CAPABILITIES = {
         "Statistiques d'un critère (moyenne, médiane, min, max), globales ou par catégorie, secteur ou État si ces colonnes existent.",
         "Scénarios « et si » : changer un ou plusieurs poids à la fois, la coupure λ, ou désactiver le filtre, puis voir "
         "quels projets changent de catégorie (simulation temporaire, l'analyse affichée ne change pas).",
+        "Fiche d'un projet sous un scénario : catégorie, rangs et fragilité recalculés avec d'autres poids, une autre "
+        "coupure λ ou sans filtre, comparés à l'analyse de référence.",
         "Explication de la méthode avec les paramètres réels : AHP, filtre, profils, ELECTRE III, ELECTRE TRI (règle "
         "pessimiste), PROMETHEE II, sensibilité.",
         "Démonstration uniquement : données historiques SBA (taux de défaut par période, audit, métriques et variables "
@@ -160,7 +164,32 @@ class Workspace:
         cols = [col] + [c["colonne"] for c in self.crit[:3] if c["colonne"] != col] if col else None
         return {"nombre_total": len(r), "projets": [self.short(x, cols) for _, x in r.head(int(limite or 10)).iterrows()]}
 
-    def fiche_projet(self, nom: str) -> dict:
+    def fiche_projet(self, nom: str, poids: list[dict] | None = None, coupure: float | None = None,
+                     sans_filtre: bool = False) -> dict:
+        """Fiche d'un projet ; avec poids / coupure / sans_filtre : fiche SOUS CE SCÉNARIO (MCDA relancé, robustesse
+        comprise) et comparaison avec l'analyse de référence."""
+        if poids or coupure is not None or sans_filtre:
+            base_row = self.find(nom)
+            if base_row is None:
+                return {"erreur": f"aucun projet ne correspond à « {nom} »", "noms_disponibles": self.res["nom"].tolist()}
+            sc = self._run_scenario(poids=poids, coupure=coupure, sans_filtre=sans_filtre, sensitivity=True)
+            if "erreur" in sc:
+                return sc
+            out = sc["ws"].fiche_projet(base_row["nom"])                    # fiche calculée dans le scénario
+            new_row = sc["ws"].find(base_row["nom"])
+
+            def rang(r, col):
+                return "non classé (écarté)" if r["ecarte"] else str(int(r[col]))
+            out["scenario"] = {"poids_utilises": sc["poids_utilises"], "coupure": sc["cfg"]["coupure"],
+                               "filtre_actif": not sans_filtre}
+            out["changements_par_rapport_a_l_analyse_de_reference"] = {
+                "categorie": f"{base_row['categorie_finale']} -> {new_row['categorie_finale']}",
+                "rang_electre3": f"{rang(base_row, 'rang_electre3')} -> {rang(new_row, 'rang_electre3')}",
+                "rang_promethee2": f"{rang(base_row, 'rang_promethee2')} -> {rang(new_row, 'rang_promethee2')}",
+                "fragilite": f"{base_row.get('fragilite_texte', 'n.d.')} -> {new_row.get('fragilite_texte', 'n.d.')}"}
+            out["remarque"] = ("Les valeurs des critères du projet et les seuils b1/b2 ne changent pas dans un scénario : "
+                               "seuls la pondération, la catégorie, les rangs et la fragilité changent.")
+            return out
         r = self.find(nom)
         if r is None:
             return {"erreur": f"aucun projet ne correspond à « {nom} »", "noms_disponibles": self.res["nom"].tolist()}
@@ -217,10 +246,11 @@ class Workspace:
         return critere if critere in self.meta else next(
             (c["colonne"] for c in self.crit if c["libelle"].lower() == str(critere).lower()), None)
 
-    def simuler_scenario(self, critere: str | None = None, nouveau_poids: float | None = None,
-                         poids: list[dict] | None = None, coupure: float | None = None,
-                         sans_filtre: bool = False) -> dict:
-        """poids : [{"critere": ..., "poids": 0.3}, ...] (un ou plusieurs) ; critere / nouveau_poids : forme courte."""
+    def _run_scenario(self, critere: str | None = None, nouveau_poids: float | None = None,
+                      poids: list[dict] | None = None, coupure: float | None = None, sans_filtre: bool = False,
+                      sensitivity: bool = False) -> dict:
+        """Relance le MCDA avec des poids imposés (les autres gardent leurs proportions), une autre coupure λ ou sans
+        filtre. Renvoie {ws (Workspace du scénario), cfg, poids_utilises} ou {erreur}."""
         cfg = json.loads(engine.config_to_json(self.cfg))
         w = self.w.copy()
         changes_req = list(poids or [])
@@ -254,18 +284,36 @@ class Workspace:
             cfg["filtre"] = []
         cols = list(dict.fromkeys(["id", "nom"] + [c["colonne"] for c in self.crit]
                                   + [r["critere"] for r in cfg.get("filtre", [])]))
-        new = engine.evaluate(self.res[cols], cfg, sensitivity=False)["results"]
+        ev = engine.evaluate(self.res[cols], cfg, sensitivity=sensitivity)
+        res = ev["results"]
+        # informations descriptives seulement (la stabilité face aux 20 tirages de simulation n'est pas recalculée
+        # dans un scénario : on ne la recopie pas, pour ne pas la confondre avec la fragilité du scénario)
+        extra = [c for c in ("secteur", "etat", "montant_pret", "facteurs_risque") if c in self.res and c not in res]
+        if extra:                                                       # informations descriptives de la référence
+            res = res.merge(self.res[["id"] + extra], on="id", how="left")
+        return {"ws": Workspace({**ev, "results": res}, demo=self.demo), "cfg": cfg,
+                "poids_utilises": {self.meta[c]["libelle"]: f"{100 * v:.1f} %" for c, v in w.items()}}
+
+    def simuler_scenario(self, critere: str | None = None, nouveau_poids: float | None = None,
+                         poids: list[dict] | None = None, coupure: float | None = None,
+                         sans_filtre: bool = False) -> dict:
+        """poids : [{"critere": ..., "poids": 0.3}, ...] (un ou plusieurs) ; critere / nouveau_poids : forme courte."""
+        sc = self._run_scenario(critere, nouveau_poids, poids, coupure, sans_filtre)
+        if "erreur" in sc:
+            return sc
+        new = sc["ws"].res
         before = self.res.set_index("id")["categorie_finale"]
         after = new.set_index("id")["categorie_finale"]
         names = self.res.set_index("id")["nom"]
         changes = [f"{names[i]} : {before[i]} -> {after[i]}" for i in before.index if before[i] != after[i]]
         cb = before.value_counts().reindex(mcda.CATEGORIES[::-1], fill_value=0)
         ca = after.value_counts().reindex(mcda.CATEGORIES[::-1], fill_value=0)
-        return {"poids_utilises": {self.meta[c]["libelle"]: f"{100 * v:.1f} %" for c, v in w.items()},
-                "coupure": cfg["coupure"], "filtre_actif": not sans_filtre,
+        return {"poids_utilises": sc["poids_utilises"],
+                "coupure": sc["cfg"]["coupure"], "filtre_actif": not sans_filtre,
                 "categories_avant": cb.to_dict(), "categories_apres": ca.to_dict(),
                 "evolution": {k: f"{int(ca[k] - cb[k]):+d}" for k in cb.index},
-                "nombre_de_projets_qui_changent": len(changes), "projets_qui_changent": changes or ["aucun"]}
+                "nombre_de_projets_qui_changent": len(changes), "projets_qui_changent": changes or ["aucun"],
+                "pour_le_detail_d_un_projet": "appeler fiche_projet avec les mêmes poids / coupure / sans_filtre"}
 
     def parametres_methode(self, sujet: str = "tout") -> dict:
         c = self.cfg
@@ -342,6 +390,11 @@ class Workspace:
 def tool_specs(ws: Workspace) -> list[dict]:
     crit = [c["colonne"] for c in ws.crit]
     s = lambda d, **k: {"type": "string", "description": d, **k}  # noqa: E731
+    poids_spec = {"type": "array", "description": "nouveaux poids imposés (un ou plusieurs critères)",
+                  "items": {"type": "object", "properties": {
+                      "critere": s("colonne du critère", enum=crit),
+                      "poids": {"type": "number", "description": "poids entre 0 et 1 (ex. 0.3 pour 30 %)"}},
+                      "required": ["critere", "poids"]}}
     specs = [
         ("capacites", "Ce que le conseiller sait faire et ne sait pas faire, et les méthodes réellement utilisées.", {}, []),
         ("resume_resultats", "Vue d'ensemble : nombre de projets, catégories, exclusions, poids, meilleurs projets, fragilité.", {}, []),
@@ -352,8 +405,12 @@ def tool_specs(ws: Workspace) -> list[dict]:
           "limite": {"type": "integer", "description": "nombre maximum de projets"},
           "inclure_ecartes": {"type": "boolean", "description": "inclure les projets écartés par le filtre"},
           "texte": s("filtre texte sur le nom, le secteur ou l'État")}, []),
-        ("fiche_projet", "Tous les faits sur un projet : critères, catégorie, rangs, position par rapport aux seuils, fragilité.",
-         {"nom": s("nom (ou partie du nom) du projet")}, ["nom"]),
+        ("fiche_projet", "Tous les faits sur un projet : critères, catégorie, rangs, position par rapport aux seuils, "
+                         "fragilité. Avec poids / coupure / sans_filtre : la fiche du projet SOUS CE SCÉNARIO (catégorie, "
+                         "rangs et fragilité recalculés) et ce qui change par rapport à l'analyse de référence.",
+         {"nom": s("nom (ou partie du nom) du projet"), "poids": poids_spec,
+          "coupure": {"type": "number", "description": "coupure λ du scénario, entre 0,5 et 1"},
+          "sans_filtre": {"type": "boolean", "description": "scénario sans filtre éliminatoire"}}, ["nom"]),
         ("comparer_projets", "Compare 2 à 6 projets critère par critère.",
          {"noms": {"type": "array", "items": {"type": "string"}, "description": "noms des projets"}}, ["noms"]),
         ("statistiques", "Moyenne, médiane, minimum, maximum d'un critère, éventuellement par catégorie, secteur ou État.",
@@ -362,11 +419,7 @@ def tool_specs(ws: Workspace) -> list[dict]:
         ("simuler_scenario", "Et si ? Relance le MCDA avec un ou plusieurs nouveaux poids, une autre coupure λ ou sans "
                              "filtre, et liste les projets qui changent de catégorie. Les poids non cités gardent leurs "
                              "proportions et se partagent le reste.",
-         {"poids": {"type": "array", "description": "nouveaux poids imposés (un ou plusieurs critères)",
-                    "items": {"type": "object", "properties": {
-                        "critere": s("colonne du critère", enum=crit),
-                        "poids": {"type": "number", "description": "poids entre 0 et 1 (ex. 0.3 pour 30 %)"}},
-                        "required": ["critere", "poids"]}},
+         {"poids": poids_spec,
           "coupure": {"type": "number", "description": "coupure λ entre 0,5 et 1"},
           "sans_filtre": {"type": "boolean", "description": "désactiver le filtre éliminatoire"}}, []),
         ("parametres_methode", "Paramètres et explication de la méthode (critères, poids/AHP, filtre, profils, seuils, méthodes, données, limites).",

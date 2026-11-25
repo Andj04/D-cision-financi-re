@@ -84,6 +84,18 @@ def test_scenario_several_weights_and_capabilities(demo_eval):
     assert cap["ce_que_je_ne_fais_pas"] and "ELECTRE TRI" in cap["methodes_utilisees"]
 
 
+def test_project_sheet_under_scenario(demo_eval):
+    ws = advisor.Workspace(demo_eval, demo=True)
+    r = ws.fiche_projet("Garde-meubles Silva", poids=[{"critere": "esg_score", "poids": 0.2},
+                                                      {"critere": "van", "poids": 0.3}])
+    ch = r["changements_par_rapport_a_l_analyse_de_reference"]
+    assert ch["categorie"] == "Conditionner -> Financer" and r["faits"]["categorie"] == "Financer"
+    assert r["scenario"]["poids_utilises"]["Score ESG"] == "20.0 %"
+    assert "stabilite_simulation" not in r["faits"]                  # non recalculée dans un scénario
+    assert "fiche_projet" in [t["name"] for t in advisor.tool_specs(ws)]
+    assert "poids" in next(t for t in advisor.tool_specs(ws) if t["name"] == "fiche_projet")["parameters"]["properties"]
+
+
 def test_foreign_method_names_flagged():
     assert advisor.foreign_methods("On utilise ELECTRE Tri-C et TOPSIS.") == ["ELECTRE Tri-C", "TOPSIS"]
     ok = "AHP, ELECTRE III, ELECTRE TRI (c'est la règle pessimiste), PROMETHEE II et l'EBM."
