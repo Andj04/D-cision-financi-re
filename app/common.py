@@ -9,7 +9,31 @@ import pandas as pd
 import streamlit as st
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / "src"))
+if str(ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(ROOT / "src"))
+
+
+def _reload_src_if_changed():
+    """Streamlit Cloud relance le script après un push SANS redémarrer Python : un module de src/ déjà importé
+    resterait dans son ancienne version (ex. « mcda has no attribute OPS »). On recharge donc les modules
+    locaux, dans l'ordre des dépendances, dès que les fichiers de src/ ont changé."""
+    import importlib
+    import types
+    files = sorted((ROOT / "src").glob("*.py"))
+    stamp = tuple((f.name, f.stat().st_mtime, f.stat().st_size) for f in files)
+    reg = sys.modules.setdefault("_src_reload_registry", types.ModuleType("_src_reload_registry"))
+    if getattr(reg, "stamp", None) != stamp:
+        for name in ["damodaran", "naming", "features", "mcda", "agent", "engine", "advisor"]:
+            if name in sys.modules:
+                importlib.reload(sys.modules[name])
+        reg.stamp = stamp
+        try:
+            st.cache_data.clear()                       # résultats en cache calculés avec l'ancien code
+        except Exception:
+            pass
+
+
+_reload_src_if_changed()
 import engine  # noqa: E402
 
 D, R, P = ROOT / "data/processed", ROOT / "reports", ROOT / "params"

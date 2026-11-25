@@ -5,7 +5,13 @@ filtre, seuils), robustesse, modèle de risque, méthode. Toutes les pages trava
 la démonstration (40 prêts SBA) au départ, ou le jeu importé et configuré par l'utilisateur.
 Lancer : streamlit run app/app.py
 """
+import sys
+from pathlib import Path
+
 import streamlit as st
+
+if str(Path(__file__).resolve().parent) not in sys.path:      # common.py et views/ (dossier de l'application)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 st.set_page_config(page_title="Décision d'investissement multicritère", page_icon="📊", layout="wide")
 
