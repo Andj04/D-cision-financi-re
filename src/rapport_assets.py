@@ -174,7 +174,7 @@ def arbitrage_figures(ev):
     ax.text(0.35 * s["budget"] / 1e6, len(sect) - 0.4, " plafond 35 %", fontsize=8, color=CAT["Refuser"], va="top")
     ax.set_xlabel("montant engagé (millions de $)")
     ax.set_title(f"Arbitrage : {s['projets_selectionnes']} projets retenus, "
-                 f"{s['montant_engage'] / 1e6:.2f} M\$ engagés sur 5 M\$".replace(".", ","))
+                 f"{s['montant_engage'] / 1e6:.2f} M\\$ engagés sur 5 M\\$".replace(".", ","))
     save(fig, "arbitrage_secteurs.png")
     rows = []
     for mode, lab in [("classement", "Suivre le classement"), ("nombre", "Maximiser le nombre")]:
