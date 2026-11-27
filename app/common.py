@@ -26,7 +26,7 @@ def _reload_src_if_changed():
     stamp = tuple((f.name, f.stat().st_mtime, f.stat().st_size) for f in files)
     reg = sys.modules.setdefault("_src_reload_registry", types.ModuleType("_src_reload_registry"))
     if getattr(reg, "stamp", None) != stamp:
-        for name in ["damodaran", "naming", "features", "mcda", "agent", "engine", "advisor"]:
+        for name in ["damodaran", "naming", "features", "mcda", "arbitrage", "agent", "engine", "advisor"]:
             if name in sys.modules:
                 importlib.reload(sys.modules[name])
         reg.stamp = stamp
@@ -185,6 +185,17 @@ def set_active(df: pd.DataFrame, config: dict, demo: bool, sensitivity: bool = T
     ev = cached_evaluate(df, engine.config_to_json(config), sensitivity)
     st.session_state["active"] = {"ev": ev, "demo": demo, "df": df, "config": config}
     st.session_state.pop("chat", None)                 # nouvelle analyse : nouvelle conversation
+
+
+def apply_arbitrage(params: dict):
+    """Relance l'arbitrage budgétaire (rapide, sans refaire le MCDA) et met à jour l'analyse active."""
+    import arbitrage
+    act = active()
+    res = act["ev"]["results"].drop(columns=["selection_budget", "motif_arbitrage"], errors="ignore")
+    res, summ = arbitrage.run(res, params)
+    act["config"] = {**act["config"], "arbitrage": params}
+    act["ev"] = {**act["ev"], "results": res, "arbitrage": summ, "config": act["config"]}
+    st.session_state["active"] = act
 
 
 def active() -> dict:

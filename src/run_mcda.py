@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import arbitrage
 import mcda
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,6 +75,19 @@ def main():
     (post.groupby("categorie_finale")["vraie_issue_default_60m"].agg(projets="size", defauts_reels="sum")
          .reindex(["Financer", "Conditionner", "Refuser"]).reset_index()
          .to_csv(OUT / "controle_a_posteriori.csv", index=False))
+
+    # Agent d'arbitrage : sélection sous budget (paramètres par défaut de la démonstration, src/arbitrage.py)
+    sim = pd.read_csv(OUT / "simulation_detail.csv")[["loan_id", "secteur_damodaran", "montant_pret"]]
+    arb_in = res.merge(sim, on="loan_id").rename(columns={"secteur_damodaran": "secteur"})
+    arb_res, arb_sum = arbitrage.run(arb_in, arbitrage.DEFAULTS)
+    arb_res[["loan_id", "nom_projet", "categorie_finale", "rang_electre3", "secteur", "montant_pret",
+             "selection_budget", "motif_arbitrage"]].sort_values(["selection_budget", "rang_electre3"],
+                                                                 ascending=[False, True]).to_csv(
+        OUT / "arbitrage_budget.csv", index=False)
+    (PARAMS / "arbitrage.json").write_text(json.dumps(arb_sum, indent=2, ensure_ascii=False, default=float),
+                                           encoding="utf-8")
+    print(f"arbitrage : {arb_sum['projets_selectionnes']} projets retenus, {arb_sum['montant_engage']:,.0f} $ engagés "
+          f"sur {arb_sum['budget']:,.0f} $")
 
     print(f"CR AHP = {cr:.4f}  | poids : {dict(w.round(3))}")
     print(f"taux de référence {ref:.4f} -> seuil pd {2 * ref:.4f}")

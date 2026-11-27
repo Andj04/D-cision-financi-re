@@ -17,7 +17,7 @@ st.set_page_config(page_title="Aide à la décision d'investissement · Centrale
                    page_icon=str(Path(__file__).resolve().parent / "assets/logo-ecc-icone.png"), layout="wide")
 
 import common  # noqa: E402
-from views import conseiller, configurer, dashboard, methode, modele, projet, robustesse  # noqa: E402
+from views import arbitrage, conseiller, configurer, dashboard, methode, modele, projet, robustesse  # noqa: E402
 
 st.markdown(common.CSS, unsafe_allow_html=True)
 st.logo(str(common.ASSETS / "logo-ecc-horizontal.png"), size="large",
@@ -28,15 +28,17 @@ pages = [
     st.Page(dashboard.render, title="Tableau de bord", icon=":material/space_dashboard:", url_path="tableau-de-bord",
             default=True),
     st.Page(projet.render, title="Fiche projet", icon=":material/description:", url_path="fiche-projet"),
+    st.Page(arbitrage.render, title="Arbitrage budgétaire", icon=":material/account_balance_wallet:",
+            url_path="arbitrage"),
     st.Page(conseiller.render, title="Conseiller IA", icon=":material/forum:", url_path="conseiller"),
     st.Page(configurer.render, title="Configurer l'analyse", icon=":material/tune:", url_path="configurer"),
     st.Page(robustesse.render, title="Robustesse", icon=":material/verified:", url_path="robustesse"),
     st.Page(modele.render, title="Modèle de risque", icon=":material/monitoring:", url_path="modele"),
     st.Page(methode.render, title="Méthode", icon=":material/menu_book:", url_path="methode"),
 ]
-common.PAGES.update(dict(zip(["tableau-de-bord", "fiche-projet", "conseiller", "configurer", "robustesse", "modele",
-                               "methode"], pages)))
-nav = st.navigation({"Analyse": pages[:3], "Outil": pages[3:5], "Référence": pages[5:]})
+common.PAGES.update(dict(zip(["tableau-de-bord", "fiche-projet", "arbitrage", "conseiller", "configurer", "robustesse",
+                               "modele", "methode"], pages)))
+nav = st.navigation({"Analyse": pages[:4], "Outil": pages[4:6], "Référence": pages[6:]})
 
 with st.sidebar:
     res = act["ev"]["results"]
@@ -46,7 +48,10 @@ with st.sidebar:
         f"<div class='n'>{common.h(act['config'].get('nom', 'Analyse'))}</div>"
         f"{len(res)} projets &nbsp;·&nbsp; {common.dot('Financer')}{counts.get('Financer', 0)} &nbsp;"
         f"{common.dot('Conditionner')}{counts.get('Conditionner', 0)} &nbsp;{common.dot('Refuser')}{counts.get('Refuser', 0)}"
-        f"</div>", unsafe_allow_html=True)
+        + (f"<br>Budget : <b>{act['ev']['arbitrage']['projets_selectionnes']}</b> projets retenus "
+           f"({100 * act['ev']['arbitrage']['taux_utilisation']:.1f} % engagé)".replace(".", ",")
+           if (act["ev"].get("arbitrage") or {}).get("actif") else "")
+        + "</div>", unsafe_allow_html=True)
     if not act["demo"]:
         if st.button("Revenir à la démonstration", icon=":material/undo:", width="stretch"):
             st.session_state.pop("active", None)

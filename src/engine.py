@@ -17,6 +17,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+import arbitrage
 import mcda
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,7 +82,8 @@ def demo_config() -> dict:
             "ahp_jugements": pd.read_csv(P / "ahp_jugements.csv", dtype=str).to_dict("records"),
             "filtre": mcda.default_rules(filt["taux_defaut_reference"], filt["dscr_min_plancher"], filt["multiple"]),
             "seuils": {"q": 0.05, "p": 0.20, "v": 0.50}, "coupure": 0.6,
-            "colonnes_info": ["secteur", "etat", "montant_pret", "investissement", "duree_standard_annees"]}
+            "colonnes_info": ["secteur", "etat", "montant_pret", "investissement", "duree_standard_annees"],
+            "arbitrage": dict(arbitrage.DEFAULTS), "devise": "$"}
 
 
 # ----------------------------------------------------------------------------------------------- nouveau jeu
@@ -102,8 +104,15 @@ def guess_config(df: pd.DataFrame, name: str = "Mon analyse") -> dict:
              "sens": "max" if sense[c] > 0 else "min", "poids": round(1 / max(len(num), 1), 4),
              "format": DEMO_LABELS.get(c, ("", "dec2"))[1], "b1": prof[c][0], "b2": prof[c][1]} for c in num]
     info = [c for c in df.columns if c not in num and c not in {"id", "nom"} and c not in MODEL_COLUMNS][:4]
-    return {"nom": name, "criteres": crit, "mode_poids": "manuel", "ahp_jugements": [], "filtre": [],
-            "seuils": {"q": 0.05, "p": 0.20, "v": 0.50}, "coupure": 0.6, "colonnes_info": info}
+    cfg = {"nom": name, "criteres": crit, "mode_poids": "manuel", "ahp_jugements": [], "filtre": [],
+           "seuils": {"q": 0.05, "p": 0.20, "v": 0.50}, "coupure": 0.6, "colonnes_info": info}
+    money = next((c for c in df.columns if str(c).startswith("montant") and pd.api.types.is_numeric_dtype(df[c])), None)
+    if money:                      # budget proposé : la moitié des montants demandés, à ajuster
+        tot = float(pd.to_numeric(df[money], errors="coerce").sum())
+        cfg["arbitrage"] = {**arbitrage.DEFAULTS, "colonne_montant": money, "budget": round(tot / 2, -3) or tot,
+                            "montant_min": 0.0, "montant_max": float(pd.to_numeric(df[money], errors="coerce").max()),
+                            "part_max_secteur": 0.4 if "secteur" in df.columns else 1.0}
+    return cfg
 
 
 def prepare_projects(df: pd.DataFrame) -> pd.DataFrame:
@@ -188,6 +197,16 @@ def validate(df: pd.DataFrame, config: dict) -> list[str]:
                  if j["critere_a"] in cols and j["critere_b"] in cols}
         if len(pairs) != n * (n - 1) // 2:
             errs.append(f"AHP : {len(pairs)} jugement(s) sur {n * (n - 1) // 2} nécessaires pour {n} critères.")
+    arb = config.get("arbitrage")
+    if arb:
+        if arb.get("colonne_montant", "montant_pret") not in df.columns:
+            errs.append(f"Arbitrage : colonne de montant « {arb.get('colonne_montant', 'montant_pret')} » absente.")
+        if float(arb.get("budget", 0)) <= 0:
+            errs.append("Arbitrage : le budget doit être positif.")
+        if float(arb.get("montant_min", 0)) > float(arb.get("montant_max", float("inf"))):
+            errs.append("Arbitrage : le montant minimum dépasse le maximum.")
+        if not 0 < float(arb.get("part_max_secteur", 1)) <= 1:
+            errs.append("Arbitrage : la part maximale par secteur doit être entre 0 et 100 %.")
     s = config.get("seuils", {})
     if not (0 <= s.get("q", 0) <= s.get("p", 0) <= s.get("v", 0)):
         errs.append("Seuils ELECTRE : il faut q ≤ p ≤ v.")
@@ -239,6 +258,9 @@ def evaluate(df: pd.DataFrame, config: dict, sensitivity: bool = True, n_scenari
                                           "stable (catégorie inchangée dans plus de 75 % des scénarios)")
     else:
         res["fragilite_texte"] = "non évaluée"
+    out["arbitrage"] = None
+    if config.get("arbitrage"):                     # agent d'arbitrage : sélection sous budget
+        res, out["arbitrage"] = arbitrage.run(res, config["arbitrage"])
     out["results"] = res
     return out
 
@@ -253,5 +275,5 @@ def config_from_json(text: str) -> dict:
         if k not in cfg:
             raise ValueError(f"configuration incomplète : clé « {k} » absente")
     cfg.setdefault("filtre", []); cfg.setdefault("mode_poids", "manuel"); cfg.setdefault("ahp_jugements", [])
-    cfg.setdefault("colonnes_info", []); cfg.setdefault("nom", "Analyse importée")
+    cfg.setdefault("colonnes_info", []); cfg.setdefault("nom", "Analyse importée"); cfg.setdefault("devise", "")
     return cfg

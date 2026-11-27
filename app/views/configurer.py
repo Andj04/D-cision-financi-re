@@ -219,6 +219,10 @@ def render():
     config = {"nom": name, "criteres": crit, "mode_poids": mode, "ahp_jugements": judg, "filtre": rules,
               "seuils": {"q": q, "p": p, "v": v}, "coupure": lam,
               "colonnes_info": [c for c in base_cfg.get("colonnes_info", []) if c in df.columns]}
+    config["devise"] = base_cfg.get("devise", "")
+    arb = base_cfg.get("arbitrage") or engine.guess_config(df).get("arbitrage")
+    if arb and arb.get("colonne_montant", "montant_pret") in df.columns:
+        config["arbitrage"] = arb               # réglé ensuite en direct sur la page « Arbitrage budgétaire »
     errs = engine.validate(df, config)
     if cr is not None and cr >= 0.10:
         errs.append(f"AHP : ratio de cohérence {cr:.3f} ≥ 0,10, revoyez les jugements.")

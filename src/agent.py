@@ -68,6 +68,9 @@ def build_facts(row: dict, criteria: list[dict] | None = None) -> dict[str, str]
     f["fragilite"] = _text(row.get("fragilite_texte")) or "non évaluée"
     if _text(row.get("facteurs_risque")):
         f["facteurs_risque"] = row["facteurs_risque"]
+    if row.get("selection_budget") is not None and not pd_isna(row.get("selection_budget")):
+        f["selection_budget"] = ("retenu dans le budget" if bool(row["selection_budget"])
+                                 else f"non retenu dans le budget ({_text(row.get('motif_arbitrage')) or 'motif inconnu'})")
     if row.get("part_graines_meme_categorie") is not None and not pd_isna(row.get("part_graines_meme_categorie")):
         f["stabilite_simulation"] = f"{100 * row['part_graines_meme_categorie']:.0f} % des tirages simulés donnent la même catégorie"
     return {k: str(v) for k, v in f.items()}
@@ -84,7 +87,8 @@ FACT_LABELS = {"projet": "Projet", "secteur": "Secteur", "etat": "État", "monta
                "categorie": "Catégorie proposée par le MCDA", "rang_electre3": "Rang ELECTRE III",
                "rang_promethee2": "Rang PROMETHEE II", "motif_ecarte": "Critère éliminatoire déclenché",
                "fragilite": "Fragilité de la décision", "facteurs_risque": "Facteurs de risque du modèle",
-               "stabilite_simulation": "Sensibilité à la simulation"}
+               "stabilite_simulation": "Sensibilité à la simulation",
+               "selection_budget": "Arbitrage budgétaire"}
 
 
 def facts_to_text(facts: dict[str, str]) -> str:
@@ -122,7 +126,8 @@ def verify_note(note: str, facts: dict[str, str]) -> tuple[bool, list[str]]:
 
 # --------------------------------------------------------------------------------------- gabarit (sans LLM)
 FIXED_KEYS = {"projet", "identifiant", "secteur", "etat", "montant_pret", "categorie", "rang_electre3",
-              "rang_promethee2", "motif_ecarte", "fragilite", "facteurs_risque", "stabilite_simulation"}
+              "rang_promethee2", "motif_ecarte", "fragilite", "facteurs_risque", "stabilite_simulation",
+              "selection_budget"}
 
 
 def template_note(facts: dict[str, str]) -> str:
@@ -141,6 +146,8 @@ def template_note(facts: dict[str, str]) -> str:
     lines.append(f"Fragilité de la décision : {f['fragilite']}.")
     if "stabilite_simulation" in f:
         lines.append(f"Sensibilité à la simulation : {f['stabilite_simulation']}.")
+    if "selection_budget" in f:
+        lines.append(f"Arbitrage budgétaire : {f['selection_budget']}.")
     lines.append("Cette note est une aide à la décision ; la décision finale revient au comité d'investissement.")
     return " ".join(lines)
 

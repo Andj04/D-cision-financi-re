@@ -99,5 +99,15 @@
   "colonnes_info": [
     "secteur",
     "montant_pret"
-  ]
+  ],
+  "arbitrage": {
+    "budget": 1500000.0,
+    "montant_min": 50000.0,
+    "montant_max": 500000.0,
+    "part_max_secteur": 0.4,
+    "inclure_conditionner": true,
+    "mode": "classement",
+    "colonne_montant": "montant_pret",
+    "colonne_secteur": "secteur"
+  }
 }

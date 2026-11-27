@@ -11,14 +11,14 @@ Projet de machine learning de groupe dans le secteur bancaire. La banque est le 
 | `data/raw/` | Données brutes téléchargées, jamais modifiées (fichiers FOIA SBA 7(a)). Non versionné. |
 | `data/external/` | Paramètres externes (Damodaran `wacc.xlsx`). Non versionné. |
 | `data/processed/` | Jeux train/val/test (non versionnés, lourds) et **petits artefacts versionnés** (CSV/JSON : audit, prédictions, `project_scores.csv`, résultats MCDA, sensibilités). |
-| `src/` | Pipeline : `data_prep.py`, `features.py`, `models.py`, `interpret_model.py`, `export_pd.py`, `simulate.py`, `project_scores.py`, `run_mcda.py`, `sensibilite_simulation.py`, `damodaran.py`. Outil réutilisable : `mcda.py` (méthodes), `engine.py` (configuration et évaluation de n'importe quel jeu), `evaluer.py` (ligne de commande). IA générative : `agent.py` (note par projet), `advisor.py` (conseiller conversationnel). `naming.py` (noms lisibles des projets). |
+| `src/` | Pipeline : `data_prep.py`, `features.py`, `models.py`, `interpret_model.py`, `export_pd.py`, `simulate.py`, `project_scores.py`, `run_mcda.py`, `sensibilite_simulation.py`, `damodaran.py`. Outil réutilisable : `mcda.py` (méthodes), `arbitrage.py` (agent d'arbitrage : sélection sous budget), `engine.py` (configuration et évaluation de n'importe quel jeu), `evaluer.py` (ligne de commande). `eda.py` (analyse exploratoire, figures dans `reports/eda/`). IA générative : `agent.py` (note par projet), `advisor.py` (conseiller conversationnel). `naming.py` (noms lisibles des projets). |
 | `notebooks/` | `01` audit/exploration, `02` logistique, `03` EBM/comparaison, `04` interprétabilité (lisent les sorties du pipeline). |
 | `app/` , `.streamlit/config.toml` | Application Streamlit (`app.py` + `common.py` + une page par fichier dans `views/`), logo de l'École Centrale Casablanca (`app/assets/`) et thème à ses couleurs (vert `#02987D`, gris `#72777A`, mesurés sur le logo). Les figures matplotlib suivent la même charte (`src/style.py` ; `python src/models.py --figures` les redessine sans réentraîner). |
 | `exemples/` | Jeu de 12 PME fictives et sa configuration JSON, pour essayer l'outil sur d'autres données. |
 | `models/` | Modèles entraînés (`risk_models.joblib`). |
-| `reports/` | Métriques, réglage des hyperparamètres, graphiques (calibration, importances, effets EBM), erreurs par segment. |
+| `reports/` | Métriques, réglage des hyperparamètres, graphiques (calibration, importances, effets EBM), erreurs par segment ; `reports/eda/` : figures de l'analyse exploratoire. |
 | `params/` | Paramètres sectoriels utilisés, **jugements AHP (modifiables)**, matrice et poids AHP, profils ELECTRE TRI, filtre éliminatoire. |
-| `tests/` | `test_mcda.py` (exemple à 3 projets calculé à la main, AHP, filtre, profils), `test_pipeline.py` (garde-fous fuite / double comptage), `test_engine.py` (moteur générique, configuration, outils du conseiller, vérificateur, noms), `check_agent.py` (garde-fou de l'agent). |
+| `tests/` | `test_mcda.py` (exemple à 3 projets calculé à la main, AHP, filtre, profils), `test_pipeline.py` (garde-fous fuite / double comptage), `test_engine.py` (moteur générique, configuration, outils du conseiller, vérificateur, noms), `test_arbitrage.py` (budget, bornes, plafond sectoriel), `check_agent.py` (garde-fou de l'agent). |
 | `scripts/download_data.py` | Vérifie la présence des données et indique où les obtenir. |
 
 ## Installation et reproduction
@@ -38,8 +38,9 @@ python models.py                 # 2-3. réglage, logistique + EBM, calibration,
 python export_pd.py              # 5. pd_ml de chaque prêt du test
 python simulate.py               # 6. 40 prêts + indicateurs simulés (graine 2026)
 python project_scores.py         # 7. table project_scores (40 lignes : identifiant + 8 critères, sans valeur manquante)
+python eda.py                    # 2. analyse exploratoire : figures dans reports/eda/
 python interpret_model.py        # 4. importances, permutation, erreurs (validation), facteurs de risque par projet
-python run_mcda.py               # 8. AHP, filtre, ELECTRE III / TRI, PROMETHEE II, sensibilité
+python run_mcda.py               # 8. AHP, filtre, ELECTRE III / TRI, PROMETHEE II, sensibilité, arbitrage sous budget
 python sensibilite_simulation.py # 8 bis. mêmes 40 prêts, 20 tirages des indicateurs simulés
 cd ..
 python -m pytest tests -q && python tests/check_agent.py
@@ -91,6 +92,19 @@ Le modèle est retenu sur la validation (Brier calibré le plus bas). L'écart d
 - *Contrôle a posteriori* (illustration, `controle_a_posteriori.csv`, la vraie issue est lue après les décisions et n'entre dans aucun calcul) : 3 des 40 prêts ont réellement fait défaut ; les 3 sont en « Refuser ». Trois cas n'ont aucune valeur de preuve.
 
 Le MCDA est vérifié à la main sur un exemple à trois projets (`tests/test_mcda.py`) ; ELECTRE III est implémenté en numpy (pas pyDecision) pour être auditable.
+
+## Analyse exploratoire
+
+`python src/eda.py` produit 7 figures dans `reports/eda/` (reprises dans le notebook `01`) : défaut par année (pic à 28 % pour les prêts de 2007, crise de 2008, puis moins de 5 % après 2011), déséquilibre des classes par bloc, défaut par secteur (de 5,2 % en agriculture à 19,0 % dans l'immobilier, en entraînement), défaut par tranche de durée (28,0 % pour ≤ 60 mois contre 2,0 % au-delà de 120 mois) et illustration de la fuite de la durée exacte (34,9 % de défaut pour une durée non ronde contre 1,6 % pour une durée ronde), montants (les petits prêts font plus souvent défaut : 19,9 % pour le premier décile contre 3,5 % pour le dernier), variables catégorielles et valeurs manquantes (le taux d'intérêt manque pour 79 % des prêts d'entraînement, aucun ensuite).
+
+## Agent d'arbitrage : sélection sous budget
+
+Le sujet impose un montant global alloué, des montants minimum et maximum par projet et des projets variés par secteur. `src/arbitrage.py` choisit les projets à financer parmi les « Financer » (puis, si on l'autorise, les « Conditionner ») :
+
+- **règle « suivre le classement »** (par défaut) : on finance dans l'ordre du comité (les « Financer » par rang ELECTRE III, puis les « Conditionner ») tant que le budget, les bornes et le plafond du secteur le permettent ; c'est l'optimum exact quand un projet mieux classé doit toujours passer avant, et chaque refus a son motif ;
+- **règle « maximiser le nombre »** : programmation linéaire en nombres entiers (sac à dos multi-contraintes, `scipy.optimize.milp`), pour comparer.
+
+Démonstration (budget 5 M$, 20 000 $ à 2 M$ par projet, au plus 35 % par secteur) : **11 projets retenus** (8 « Financer », 3 « Conditionner »), 4,98 M$ engagés (99,6 %), 7 secteurs ; seul « Pompes funèbres Price » (Financer) est écarté, par le plafond de son secteur. La règle « maximiser le nombre » retient 21 projets dans 11 secteurs mais écarte le projet classé n° 1 (Studio Murphy, 1,7 M$) : c'est pourquoi la règle du classement est retenue par défaut. Page « Arbitrage budgétaire » de l'application (paramètres réglables en direct), outil `arbitrage_budget` du conseiller, résultat dans `data/processed/arbitrage_budget.csv`.
 
 ## Noms des projets
 

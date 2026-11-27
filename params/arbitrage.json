@@ -1,0 +1,29 @@
+{
+  "actif": true,
+  "parametres": {
+    "budget": 5000000.0,
+    "montant_min": 20000.0,
+    "montant_max": 2000000.0,
+    "part_max_secteur": 0.35,
+    "inclure_conditionner": true,
+    "mode": "classement"
+  },
+  "budget": 5000000.0,
+  "montant_engage": 4980000.0,
+  "budget_restant": 20000.0,
+  "taux_utilisation": 0.996,
+  "projets_selectionnes": 11,
+  "dont_financer": 8,
+  "dont_conditionner": 3,
+  "financer_non_retenus": 1,
+  "montant_par_secteur": {
+    "Business & Consumer Services": 1750000.0,
+    "Engineering/Construction": 65000.0,
+    "Financial Svcs. (Non-bank & Insurance)": 820000.0,
+    "Food Processing": 50000.0,
+    "Healthcare Support Services": 1069500.0,
+    "Retail (Distributors)": 350000.0,
+    "Transportation": 875500.0
+  },
+  "secteurs_finances": 7
+}

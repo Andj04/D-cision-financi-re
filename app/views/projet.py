@@ -33,6 +33,11 @@ def render():
         if info:
             st.markdown(f"<span class='muted'>{common.h(' · '.join(map(str, info)))}</span>", unsafe_allow_html=True)
     with h2:
+        if "selection_budget" in row:
+            ok = bool(row.selection_budget)
+            st.markdown(f"<span class='tag {'ok' if ok else 'info'}'>Budget : "
+                        f"{'retenu' if ok else 'non retenu'}</span><span class='muted'>{common.h(row.motif_arbitrage)}</span>",
+                        unsafe_allow_html=True)
         if row.ecarte:
             st.error(md(f"Écarté par le filtre : {row.motif_ecarte}"))
         else:

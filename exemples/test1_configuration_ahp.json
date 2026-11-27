@@ -241,5 +241,16 @@
     "secteur",
     "ville",
     "montant_pret"
-  ]
+  ],
+  "arbitrage": {
+    "budget": 12000000.0,
+    "montant_min": 300000.0,
+    "montant_max": 4500000.0,
+    "part_max_secteur": 0.35,
+    "inclure_conditionner": true,
+    "mode": "classement",
+    "colonne_montant": "montant_pret",
+    "colonne_secteur": "secteur"
+  },
+  "devise": "MAD"
 }

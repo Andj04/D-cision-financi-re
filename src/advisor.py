@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 
 import agent
+import arbitrage
 import engine
 import mcda
 
@@ -47,7 +48,8 @@ SYSTEM = (
     "exactement ce qu'il renvoie, limites comprises, sans rien ajouter."
 )
 
-ALLOWED_METHODS = ["AHP", "ELECTRE III", "ELECTRE TRI", "PROMETHEE II", "EBM", "régression logistique"]
+ALLOWED_METHODS = ["AHP", "ELECTRE III", "ELECTRE TRI", "PROMETHEE II", "EBM", "régression logistique",
+                   "arbitrage sous budget (sélection dans l'ordre du classement, ou optimisation en nombres entiers)"]
 # noms de méthodes que le conseiller ne doit pas attribuer au projet (signalés s'ils apparaissent)
 _FOREIGN = re.compile(                                  # sensible à la casse : « ELECTRE TRI c'est » n'est pas « Tri-C »
     r"\bELECTRE[\s-]*(?:(?:TRI|Tri)[\s-]?n?C\b|(?:TRI|Tri)[\s-]?B\b|IV\b|IS\b|II\b|I\b)"
@@ -64,6 +66,8 @@ CAPABILITIES = {
         "quels projets changent de catégorie (simulation temporaire, l'analyse affichée ne change pas).",
         "Fiche d'un projet sous un scénario : catégorie, rangs et fragilité recalculés avec d'autres poids, une autre "
         "coupure λ ou sans filtre, comparés à l'analyse de référence.",
+        "Arbitrage budgétaire : quels projets financer avec le budget, les montants min/max par projet et le plafond "
+        "par secteur, et simulation d'un autre budget.",
         "Explication de la méthode avec les paramètres réels : AHP, filtre, profils, ELECTRE III, ELECTRE TRI (règle "
         "pessimiste), PROMETHEE II, sensibilité.",
         "Démonstration uniquement : données historiques SBA (taux de défaut par période, audit, métriques et variables "
@@ -131,6 +135,9 @@ class Workspace:
             out["decisions_fragiles"] = int(r["decision_fragile"].sum())
             out["fragiles_par_categorie"] = r[r["decision_fragile"]]["categorie_finale"].value_counts().to_dict()
         out["positions_ambigues_electre3"] = int(r["position_ambigue"].sum())
+        if "selection_budget" in r:
+            out["arbitrage_budget"] = {"projets_retenus": int(r["selection_budget"].sum()),
+                                       "detail": "appeler arbitrage_budget pour le budget, les montants et les motifs"}
         if self.sens is not None:
             m = self.sens["comparaison_methodes"].iloc[0]
             out["correlation_electre3_promethee2"] = {"spearman": f"{m.spearman:.3f}", "kendall": f"{m.kendall:.3f}"}
@@ -282,8 +289,10 @@ class Workspace:
             cfg["coupure"] = float(coupure)
         if sans_filtre:
             cfg["filtre"] = []
+        arb = cfg.get("arbitrage") or {}
+        extra_cols = [c for c in (arb.get("colonne_montant"), arb.get("colonne_secteur")) if c and c in self.res]
         cols = list(dict.fromkeys(["id", "nom"] + [c["colonne"] for c in self.crit]
-                                  + [r["critere"] for r in cfg.get("filtre", [])]))
+                                  + [r["critere"] for r in cfg.get("filtre", [])] + extra_cols))
         ev = engine.evaluate(self.res[cols], cfg, sensitivity=sensitivity)
         res = ev["results"]
         # informations descriptives seulement (la stabilité face aux 20 tirages de simulation n'est pas recalculée
@@ -314,6 +323,39 @@ class Workspace:
                 "evolution": {k: f"{int(ca[k] - cb[k]):+d}" for k in cb.index},
                 "nombre_de_projets_qui_changent": len(changes), "projets_qui_changent": changes or ["aucun"],
                 "pour_le_detail_d_un_projet": "appeler fiche_projet avec les mêmes poids / coupure / sans_filtre"}
+
+    def arbitrage_budget(self, budget: float | None = None, montant_min: float | None = None,
+                         montant_max: float | None = None, part_max_secteur: float | None = None,
+                         inclure_conditionner: bool | None = None, mode: str | None = None) -> dict:
+        """Sélection sous budget avec les paramètres actuels, ou d'autres si on les précise (simulation)."""
+        base = arbitrage.params_with_defaults(self.cfg.get("arbitrage"))
+        if base["colonne_montant"] not in self.res:
+            return {"erreur": "ce jeu de projets n'a pas de colonne de montant : arbitrage impossible"}
+        if part_max_secteur is not None and part_max_secteur > 1:
+            part_max_secteur = part_max_secteur / 100
+        over = {"budget": budget, "montant_min": montant_min, "montant_max": montant_max,
+                "part_max_secteur": part_max_secteur, "inclure_conditionner": inclure_conditionner, "mode": mode}
+        params = {**base, **{k: v for k, v in over.items() if v is not None}}
+        res, s = arbitrage.run(self.res.drop(columns=["selection_budget", "motif_arbitrage"], errors="ignore"), params)
+        money = lambda v: engine.fmt(v, "money")  # noqa: E731
+        col = params["colonne_montant"]
+        sel = res[res["selection_budget"]].sort_values("rang_electre3")
+        out_ = res[~res["selection_budget"] & (res["categorie_finale"] != "Refuser")].sort_values("rang_electre3")
+        return {"parametres": {"budget": money(params["budget"]), "montant_min": money(params["montant_min"]),
+                               "montant_max": money(params["montant_max"]),
+                               "part_max_secteur": f"{100 * float(params['part_max_secteur']):.0f} %",
+                               "inclure_sous_conditions": bool(params["inclure_conditionner"]),
+                               "regle": "suivre le classement" if params["mode"] == "classement"
+                               else "maximiser le nombre de projets"},
+                "simulation": any(v is not None for v in over.values()),
+                "montant_engage": money(s["montant_engage"]), "budget_restant": money(s["budget_restant"]),
+                "taux_utilisation": f"{100 * s['taux_utilisation']:.1f} %",
+                "projets_retenus": s["projets_selectionnes"], "dont_financer": s["dont_financer"],
+                "dont_sous_conditions": s["dont_conditionner"], "financer_non_retenus": s["financer_non_retenus"],
+                "montant_par_secteur": {k: money(v) for k, v in s["montant_par_secteur"].items()},
+                "retenus": [f"{r['nom']} ({r['categorie_finale']}, {money(r[col])})" for _, r in sel.iterrows()],
+                "non_retenus": [f"{r['nom']} ({r['categorie_finale']}, {money(r[col])}) : {r['motif_arbitrage']}"
+                                for _, r in out_.iterrows()][:20]}
 
     def parametres_methode(self, sujet: str = "tout") -> dict:
         c = self.cfg
@@ -422,6 +464,15 @@ def tool_specs(ws: Workspace) -> list[dict]:
          {"poids": poids_spec,
           "coupure": {"type": "number", "description": "coupure λ entre 0,5 et 1"},
           "sans_filtre": {"type": "boolean", "description": "désactiver le filtre éliminatoire"}}, []),
+        ("arbitrage_budget", "Agent d'arbitrage : quels projets financer avec le budget (budget global, montants min/max par "
+                             "projet, plafond par secteur). Sans paramètre : la sélection actuelle ; avec des paramètres : "
+                             "une simulation (ex. un budget de 3 millions).",
+         {"budget": {"type": "number", "description": "budget global, dans la monnaie du jeu"},
+          "montant_min": {"type": "number", "description": "montant minimum par projet"},
+          "montant_max": {"type": "number", "description": "montant maximum par projet"},
+          "part_max_secteur": {"type": "number", "description": "part maximale d'un secteur dans le budget, entre 0 et 1"},
+          "inclure_conditionner": {"type": "boolean", "description": "compléter avec les projets sous conditions"},
+          "mode": s("règle de sélection", enum=["classement", "nombre"])}, []),
         ("parametres_methode", "Paramètres et explication de la méthode (critères, poids/AHP, filtre, profils, seuils, méthodes, données, limites).",
          {"sujet": s("sujet", enum=["tout", "criteres", "poids", "filtre", "profils_electre_tri", "seuils_et_coupure",
                                      "methodes", "donnees_et_simulation", "limites"])}, []),
@@ -557,6 +608,7 @@ QUICK = {
     "Vue d'ensemble des résultats": ("resume_resultats", {}),
     "Les 5 meilleurs projets": ("lister_projets", {"limite": 5, "inclure_ecartes": False}),
     "Projets refusés et motifs": ("lister_projets", {"categorie": "Refuser", "limite": 20}),
+    "Sélection sous budget": ("arbitrage_budget", {}),
     "Explication de la méthode": ("parametres_methode", {"sujet": "methodes"}),
     "Poids des critères": ("parametres_methode", {"sujet": "poids"}),
 }

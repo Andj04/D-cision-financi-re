@@ -11,7 +11,7 @@ AVATAR = ":material/support_agent:"
 TOOL_FR = {"capacites": "Capacités du conseiller", "resume_resultats": "Vue d'ensemble des résultats", "lister_projets": "Liste de projets",
            "fiche_projet": "Fiche projet", "comparer_projets": "Comparaison de projets", "statistiques": "Statistiques",
            "simuler_scenario": "Scénario « et si »", "parametres_methode": "Paramètres de la méthode",
-           "donnees_historiques": "Données historiques SBA"}
+           "donnees_historiques": "Données historiques SBA", "arbitrage_budget": "Arbitrage budgétaire"}
 
 
 def _workspace() -> advisor.Workspace:

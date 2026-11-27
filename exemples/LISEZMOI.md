@@ -21,6 +21,7 @@ Dans l'application : page **Configurer l'analyse**, étape 1 → « Importer des
   la plus forte VAN), Boutique Mode Gauthier (DSCR 0,98).
 - En tête : Atelier Céramique Oulfa, Coopérative Argan Tifawin, Laboratoire Analyses Bourgogne.
 - Cas intéressant : Studio Numérique Maarif est 4e mais seulement « Conditionner » (garanties 0,20) et fragile.
+- Arbitrage (page « Arbitrage budgétaire », budget 12 M MAD, 300 000 à 4,5 M MAD par projet, 35 % par secteur) : 9 projets retenus (6 à financer, 3 sous conditions), 10,00 M MAD engagés, 8 secteurs.
 
 **Test 2** : l'application affiche « Probabilité de défaut calculée par le modèle de risque ». Elle va de 0,4 %
 (Prairie Organic Farm, prêt long et ancien) à 32,6 % (Lakeview Auto Repair, prêt court, jeune entreprise).

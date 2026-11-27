@@ -51,7 +51,8 @@ def main(argv: list[str] | None = None) -> int:
     res = out["results"]
     keep = ["id", "nom", "categorie_finale", "rang_electre3", "rang_promethee2", "ecarte", "motif_ecarte"]
     keep += [c["colonne"] for c in cfg["criteres"]]
-    keep += [c for c in ("decision_fragile", "part_scenarios_categorie_differente", "position_ambigue") if c in res]
+    keep += [c for c in ("decision_fragile", "part_scenarios_categorie_differente", "position_ambigue",
+                         "selection_budget", "motif_arbitrage") if c in res]
     res[keep].sort_values(["ecarte", "rang_electre3"]).to_csv(a.sortie, index=False)
     counts = res["categorie_finale"].value_counts()
     print(f"{cfg.get('nom')} : {len(res)} projets -> Financer {counts.get('Financer', 0)}, "
@@ -60,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
     if out["cr"] is not None:
         print(f"ratio de cohérence AHP : {out['cr']:.4f}")
     print("poids :", ", ".join(f"{c['libelle']} {100 * out['weights'][c['colonne']]:.1f} %" for c in cfg["criteres"]))
+    arb = out.get("arbitrage")
+    if arb and arb.get("actif"):
+        print(f"arbitrage : {arb['projets_selectionnes']} projets retenus ({arb['dont_financer']} à financer, "
+              f"{arb['dont_conditionner']} sous conditions), {arb['montant_engage']:,.0f} engagés sur "
+              f"{arb['budget']:,.0f} ({100 * arb['taux_utilisation']:.1f} %)")
     print(f"résultats écrits dans {a.sortie}")
     return 0
 

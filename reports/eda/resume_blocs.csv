@@ -1,0 +1,4 @@
+bloc,prets,defauts,taux_defaut
+train,723663,97535,0.1348
+val,82384,2939,0.0357
+test,103986,4415,0.0425

@@ -1,0 +1,41 @@
+loan_id,nom_projet,categorie_finale,rang_electre3,secteur,montant_pret,selection_budget,motif_arbitrage
+8c4b84be838c,Studio de développement logiciel Murphy,Financer,1.0,Business & Consumer Services,1700000.0,True,sélectionné
+750c37ee6797,Atelier d'insertion professionnelle Foster,Financer,2.0,Healthcare Support Services,110000.0,True,sélectionné
+e8e31ee1e24c,Bureau d'ingénierie Dubois,Conditionner,3.0,Business & Consumer Services,50000.0,True,sélectionné (sous conditions)
+786b37cea665,Entreprise de travaux spécialisés Brooks,Conditionner,4.0,Engineering/Construction,25000.0,True,sélectionné (sous conditions)
+3dcb369a46f1,Brasserie artisanale Garcia,Financer,5.0,Food Processing,50000.0,True,sélectionné
+7c8c2e32bfff,Conseil en investissement Park,Financer,6.0,Financial Svcs. (Non-bank & Insurance),820000.0,True,sélectionné
+9ee80152e660,Transports routiers Carter,Conditionner,7.0,Transportation,875500.0,True,sélectionné (sous conditions)
+5e0227fa49d7,Cabinet dentaire Kowalski,Financer,9.0,Healthcare Support Services,609500.0,True,sélectionné
+cde08336b396,Clinique privée Nguyen,Financer,10.0,Healthcare Support Services,350000.0,True,sélectionné
+553714c69208,Grossiste en fleurs Sullivan,Financer,11.0,Retail (Distributors),350000.0,True,sélectionné
+b9549327e037,Travaux routiers Romano,Financer,24.0,Engineering/Construction,40000.0,True,sélectionné
+54913f53d7ee,Cabinet de kinésithérapie Schmidt,Conditionner,8.0,Healthcare Support Services,603000.0,False,budget insuffisant
+b64243e4f70a,Cabinet dentaire Baker,Conditionner,12.0,Healthcare Support Services,800000.0,False,budget insuffisant
+417f955f4829,Restaurant Moreau,Conditionner,13.0,Restaurant/Dining,30000.0,False,budget insuffisant
+e8ab8c9080c2,Pompes funèbres Price,Financer,14.0,Business & Consumer Services,168000.0,False,plafond du secteur atteint
+0d3dc5d97f24,Cabinet de spécialistes Ramirez,Conditionner,15.0,Healthcare Support Services,350000.0,False,budget insuffisant
+50b603021a6e,Exploitation forestière Novak,Conditionner,16.0,Farming/Agriculture,40000.0,False,budget insuffisant
+5e365907842a,Garde-meubles Silva,Conditionner,17.0,Real Estate (Operations & Services),218000.0,False,budget insuffisant
+f800b67cd2fa,Transports locaux Lopez,Conditionner,18.0,Transportation,44300.0,False,budget insuffisant
+228238ae77bf,Boutique d'accessoires Delgado,Conditionner,19.0,Retail (General),30000.0,False,budget insuffisant
+7ad1b182a1e3,Station de lavage Rivera,Conditionner,20.0,Business & Consumer Services,75000.0,False,budget insuffisant
+c247c913dfde,Entreprise de gros œuvre Fischer,Conditionner,21.0,Engineering/Construction,125000.0,False,budget insuffisant
+47e323225837,Fret longue distance Cohen,Conditionner,22.0,Transportation,10000.0,False,montant hors bornes (20 000 à 2 000 000)
+a8008352b08b,Locaux commerciaux Reyes,Conditionner,23.0,Real Estate (Operations & Services),1000000.0,False,budget insuffisant
+37c9442d97f7,Snack Tanaka,Conditionner,25.0,Restaurant/Dining,125000.0,False,budget insuffisant
+0987c52e20f0,Restaurant Bennett,Refuser,26.0,Restaurant/Dining,403000.0,False,refusé par le MCDA
+e39c28825cda,Garde-meubles Grant,Conditionner,27.0,Real Estate (Operations & Services),5000000.0,False,montant hors bornes (20 000 à 2 000 000)
+c0458e9a2f9d,Cabinet de conseil Patel,Conditionner,28.0,Business & Consumer Services,19000.0,False,montant hors bornes (20 000 à 2 000 000)
+831a79174b86,Studio de design graphique Walsh,Conditionner,29.0,Business & Consumer Services,150000.0,False,budget insuffisant
+5de06dbba2ee,Centre de soins paramédicaux Miller,Refuser,,Healthcare Support Services,15000.0,False,refusé par le MCDA
+e328e58a7ab5,Atelier de métallurgie Larsen,Refuser,,Machinery,75000.0,False,refusé par le MCDA
+a1e60b216ea9,Fret longue distance O'Brien,Refuser,,Transportation,317200.0,False,refusé par le MCDA
+ac39537d1747,Paysagiste Wright,Refuser,,Business & Consumer Services,33000.0,False,refusé par le MCDA
+b76073459596,Cave à vins Hayes,Refuser,,Retail (General),50000.0,False,refusé par le MCDA
+a7e49f6142a4,Constructeur de maisons Chen,Refuser,,Engineering/Construction,10000.0,False,refusé par le MCDA
+529957d39041,Concession nautique Ortiz,Refuser,,Retail (General),150000.0,False,refusé par le MCDA
+862ceeda52ff,Institut de bien-être Okafor,Refuser,,Business & Consumer Services,77600.0,False,refusé par le MCDA
+4f7ae4747e6c,Snack Rossi,Refuser,,Restaurant/Dining,52800.0,False,refusé par le MCDA
+68f9792a7cd8,Entreprise de travaux spécialisés Hernandez,Refuser,,Engineering/Construction,140000.0,False,refusé par le MCDA
+00c8db684ed8,Agence d'assurances Kim,Refuser,,Financial Svcs. (Non-bank & Insurance),950000.0,False,refusé par le MCDA
