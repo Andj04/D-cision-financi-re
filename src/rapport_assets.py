@@ -304,6 +304,28 @@ def tables(ev, arb_res):
           "tab:projets", size="\\scriptsize", long=True)
 
 
+def alleger_figures():
+    """Accélère la compilation (temps limité sur Overleaf gratuit) : captures d'écran en JPEG,
+    graphiques en PNG RVB sans canal alpha (pdfLaTeX doit sinon recalculer un masque de transparence)."""
+    from PIL import Image
+    for f in sorted(FIG.glob("*.png")):
+        im = Image.open(f)
+        if im.mode in ("RGBA", "LA", "P"):
+            im = im.convert("RGBA")
+            fond = Image.new("RGB", im.size, "white")
+            fond.paste(im, mask=im.split()[-1])
+            im = fond
+        else:
+            im = im.convert("RGB")
+        if f.name.startswith("app_"):
+            if im.width > 1600:
+                im = im.resize((1600, round(im.height * 1600 / im.width)), Image.LANCZOS)
+            im.save(f.with_suffix(".jpg"), quality=85, optimize=True)
+            f.unlink()
+        else:
+            im.save(f, optimize=True)
+
+
 def main():
     FIG.mkdir(parents=True, exist_ok=True)
     TAB.mkdir(parents=True, exist_ok=True)
@@ -313,12 +335,14 @@ def main():
     mcda_figures(ev, ref)
     arb_res, _ = arbitrage_figures(ev)
     tables(ev, arb_res)
-    print("figures :", len(list(FIG.glob("*.png"))), "| tableaux :", len(list(TAB.glob("*.tex"))))
+    alleger_figures()
+    print("figures :", len(list(FIG.glob("*.png")) + list(FIG.glob("*.jpg"))),
+          "| tableaux :", len(list(TAB.glob("*.tex"))))
     import zipfile                              # archive prête à importer dans Overleaf
     root = ROOT / "rapport"
     with zipfile.ZipFile(root / "rapport_overleaf.zip", "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(root.rglob("*")):
-            if f.is_file() and f.suffix in {".tex", ".bib", ".png"}:
+            if f.is_file() and f.suffix in {".tex", ".bib", ".png", ".jpg"}:
                 z.write(f, f.relative_to(root).as_posix())
 
 

@@ -11,11 +11,15 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{lmodern}
+% Latin Modern n'a pas de petites capitales grasses : on emprunte celles des polices EC.
+\DeclareFontShape{T1}{lmr}{bx}{sc}{<->ssub*cmr/bx/sc}{}
+\DeclareFontShape{T1}{lmr}{b}{sc}{<->ssub*cmr/bx/sc}{}
 \usepackage[french]{babel}
-\usepackage{microtype}
+% Expansion des polices désactivée : elle ralentit fortement la compilation (temps limité sur Overleaf).
+\usepackage[protrusion=true,expansion=false]{microtype}
 
 % ---------------------------------------------------------------- mise en page
-\usepackage[a4paper,top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm,headheight=14pt]{geometry}
+\usepackage[a4paper,top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm,headheight=24pt,headsep=14pt]{geometry}
 \usepackage{setspace}
 \setstretch{1.12}
 \usepackage{fancyhdr}
@@ -46,7 +50,7 @@
 \DeclareMathOperator*{\argmin}{arg\,min}
 
 % ---------------------------------------------------------------- encadrés, code, liens
-\usepackage[most]{tcolorbox}
+\usepackage{tcolorbox}
 \newtcolorbox{encadre}[1][]{colback=eccclair,colframe=eccvert,boxrule=0.6pt,arc=2pt,left=6pt,right=6pt,
   top=4pt,bottom=4pt,fonttitle=\bfseries\small,title={#1}}
 \newtcolorbox{definition}[1][]{colback=white,colframe=eccgris,boxrule=0.5pt,arc=2pt,left=6pt,right=6pt,
