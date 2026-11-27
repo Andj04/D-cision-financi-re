@@ -58,6 +58,25 @@ def permutation_importance(predict, X, y, n_repeats=5, max_rows=30000):
     return pd.DataFrame(rows).sort_values("baisse_AUROC_moyenne", ascending=False), base
 
 
+def shap_importance(lgbm, Xva, n=5000):
+    """Valeurs SHAP exactes pour les arbres (TreeExplainer) : |contribution| moyenne en log-odds par variable,
+    comparée à l'importance native de l'EBM. Écrit reports/shap_lightgbm.png et shap_lightgbm.csv."""
+    import shap
+    sample = Xva.sample(min(n, len(Xva)), random_state=0)
+    sv = shap.TreeExplainer(lgbm.model).shap_values(lgbm.frame(sample))
+    sv = sv[1] if isinstance(sv, list) else sv
+    imp = (pd.DataFrame({"variable": sample.columns, "shap_moyen_abs": np.abs(sv).mean(axis=0)})
+           .sort_values("shap_moyen_abs", ascending=False))
+    imp.to_csv(REP / "shap_lightgbm.csv", index=False)
+    top = imp.head(12)[::-1]
+    fig, ax = plt.subplots(figsize=(7.5, 4.6))
+    ax.barh(top.variable.map(fr_term), top.shap_moyen_abs, color="#D39B2A")
+    ax.set_xlabel("|valeur SHAP| moyenne (log-odds)")
+    ax.set_title("LightGBM : contribution moyenne de chaque variable (SHAP, validation)")
+    fig.tight_layout(); fig.savefig(REP / "shap_lightgbm.png", dpi=130); plt.close(fig)
+    print(imp.round(4).to_string(index=False))
+
+
 def main():
     art = joblib.load(ROOT / "models/risk_models.joblib")
     ebm, iso = art["ebm"], art["calibrators"]["ebm"]
@@ -108,6 +127,10 @@ def main():
         g.insert(0, "dimension", dim); g = g.rename(columns={dim: "modalite"}); out.append(g[g.n >= 300])
     err = pd.concat(out).sort_values(["dimension", "n"], ascending=[True, False])
     err.to_csv(REP / "erreurs_par_segment_validation.csv", index=False)
+
+    # 4 bis. SHAP pour LightGBM (référence « boîte noire ») : contribution moyenne de chaque variable, sur la validation
+    if "lgbm" in art:
+        shap_importance(art["lgbm"], Xva)
 
     # 5. explications locales des 40 projets (prêts du test) : 3 facteurs qui augmentent le plus le risque
     Xte, _, ids = load_split("test")

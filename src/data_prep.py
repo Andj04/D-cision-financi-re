@@ -56,7 +56,8 @@ def load_raw() -> pd.DataFrame:
         return pd.concat([pd.read_parquet(p) for p in RAW_PARQUET], ignore_index=True)
     frames = []
     for x, p in zip(RAW_XLSX, RAW_PARQUET):
-        df = pd.read_excel(x, dtype=object)
+        csv = x.with_suffix(".csv")               # le portail SBA publie aussi ces fichiers en csv
+        df = pd.read_excel(x, dtype=object) if x.exists() else pd.read_csv(csv, dtype=object, low_memory=False)
         p.parent.mkdir(parents=True, exist_ok=True)
         df.astype(str).replace({"nan": None}).to_parquet(p)  # types mixtes -> texte
         frames.append(df)

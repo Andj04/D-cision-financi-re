@@ -69,6 +69,27 @@ def load_split(name: str) -> tuple[pd.DataFrame, pd.Series, pd.Series]:
     return make_features(df), df[TARGET].astype(int), df[ID_COL]
 
 
+class LGBMModel:
+    """LightGBM sur les mêmes variables : les catégorielles passent en type « category » avec les modalités
+    APPRISES SUR L'ENTRAÎNEMENT (une modalité inconnue devient manquante). Défini ici pour être rechargé par joblib."""
+
+    def __init__(self, model, categories: dict):
+        self.model, self.categories = model, categories
+
+    @staticmethod
+    def learn_categories(X: pd.DataFrame) -> dict:
+        return {c: sorted(X[c].astype(str).unique()) for c in CATEGORICAL}
+
+    def frame(self, X: pd.DataFrame) -> pd.DataFrame:
+        out = X.copy()
+        for c in CATEGORICAL:
+            out[c] = pd.Categorical(out[c].astype(str), categories=self.categories[c])
+        return out
+
+    def predict_proba(self, X: pd.DataFrame):
+        return self.model.predict_proba(self.frame(X))
+
+
 def logreg_preprocessor() -> ColumnTransformer:
     """Imputation médiane + standardisation (numériques) ; one-hot (catégorielles) : ajustés sur train."""
     num = Pipeline([("imp", SimpleImputer(strategy="median")), ("sc", StandardScaler())])

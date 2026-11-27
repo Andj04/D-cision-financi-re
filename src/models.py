@@ -1,7 +1,13 @@
-"""Étape 3 : régression logistique (baseline) + EBM, même liste de variables, calibration, métriques.
+"""Étape 3 : trois modèles sur la même liste de variables, calibration, métriques.
 
-Protocole : tout est ajusté sur train ; le réglage (calibration, seuil F1, choix du modèle)
-se fait sur validation ; le test n'est lu qu'une fois, après le choix, pour rapporter les métriques finales.
+  * régression logistique : baseline simple, interprétable ;
+  * EBM (Explainable Boosting Machine) : modèle avancé interprétable (« boîte de verre ») ;
+  * LightGBM : modèle avancé « boîte noire », référence de performance (ce que coûte l'interprétabilité).
+
+Protocole : tout est ajusté sur train ; le réglage (hyperparamètres, arrêt anticipé, calibration, seuil F1, choix
+du modèle) se fait sur validation ; le test n'est lu qu'une fois, après le choix, pour les métriques finales.
+Règle de choix : parmi les modèles INTERPRÉTABLES (logistique, EBM), le Brier calibré le plus bas sur validation.
+Une banque doit pouvoir expliquer un refus de crédit : LightGBM n'est donc pas candidat, il sert d'étalon.
 Usage : python src/models.py
 """
 from __future__ import annotations
@@ -14,6 +20,7 @@ import joblib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import lightgbm as lgb
 from interpret.glassbox import ExplainableBoostingClassifier
 from sklearn.calibration import calibration_curve
 from sklearn.isotonic import IsotonicRegression
@@ -24,7 +31,7 @@ from sklearn.model_selection import StratifiedKFold
 from sklearn.pipeline import Pipeline
 
 import style
-from features import FEATURES, load_split, logreg_preprocessor
+from features import FEATURES, LGBMModel, load_split, logreg_preprocessor
 
 style.apply()
 
@@ -53,17 +60,21 @@ def crossfit_isotonic(p, y, n_splits=5):
     return out
 
 
-LABELS = {"logreg": "Régression logistique (calibrée)", "ebm": "EBM (calibré)"}
+LABELS = {"logreg": "Régression logistique (calibrée)", "ebm": "EBM (calibré)", "lgbm": "LightGBM (calibré)"}
+COLORS = {"ebm": style.GREEN, "logreg": style.GREY, "lgbm": "#D39B2A"}
+MODELS = ["logreg", "ebm", "lgbm"]
+INTERPRETABLE = ["logreg", "ebm"]
 
 
 def plot_calibration(yva, cal_val: dict, yte, cal_test: dict):
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.5))
     for ax, title, y, P in [(axes[0], "Validation (2013-2014)", yva, cal_val), (axes[1], "Test (2015-2016)", yte, cal_test)]:
         ax.plot([0, 0.3], [0, 0.3], ls="--", lw=1, color="#A9ADB0", label="calibration parfaite")
-        for n in ["ebm", "logreg"]:
+        for n in ["lgbm", "logreg", "ebm"]:
+            if n not in P:
+                continue
             fr, mp = calibration_curve(y, P[n], n_bins=10, strategy="quantile")
-            ax.plot(mp, fr, marker="o", ms=4, lw=1.8, label=LABELS[n],
-                    color=style.GREEN if n == "ebm" else style.GREY)
+            ax.plot(mp, fr, marker="o", ms=4, lw=2.2 if n == "ebm" else 1.4, label=LABELS[n], color=COLORS[n])
         ax.set_xlabel("probabilité prédite"); ax.set_ylabel("fréquence observée"); ax.set_title(title); ax.legend()
     fig.tight_layout(); fig.savefig(ROOT / "reports/calibration.png", dpi=130)
 
@@ -75,8 +86,9 @@ def figures_only():
     Xva, yva, _ = load_split("val")
     Xte, yte, _ = load_split("test")
     yva, yte = yva.values, yte.values
-    cal_val = {n: crossfit_isotonic(art[n].predict_proba(Xva)[:, 1], yva) for n in ("logreg", "ebm")}
-    cal_test = {n: art["calibrators"][n].predict(art[n].predict_proba(Xte)[:, 1]) for n in ("logreg", "ebm")}
+    names = [n for n in MODELS if n in art]
+    cal_val = {n: crossfit_isotonic(art[n].predict_proba(Xva)[:, 1], yva) for n in names}
+    cal_test = {n: art["calibrators"][n].predict(art[n].predict_proba(Xte)[:, 1]) for n in names}
     plot_calibration(yva, cal_val, yte, cal_test)
 
 
@@ -105,13 +117,33 @@ def main():
                      "AUROC_val_brut": auc, "duree_s": time.time() - t})
         cands["ebm"].append((auc, m))
         print(grid[-1], flush=True)
+    # LightGBM : variables catégorielles natives (modalités apprises sur train), arrêt anticipé sur la validation
+    cats = LGBMModel.learn_categories(Xtr)
+    shell = LGBMModel(None, cats)
+    Xtr_l, Xva_l = shell.frame(Xtr), shell.frame(Xva)
+    cands["lgbm"] = []
+    for leaves in [31, 127]:
+        t = time.time()
+        clf = lgb.LGBMClassifier(n_estimators=3000, learning_rate=0.05, num_leaves=leaves, min_child_samples=200,
+                                 subsample=0.8, subsample_freq=1, colsample_bytree=0.8, reg_lambda=1.0,
+                                 random_state=SEED, n_jobs=-1, verbose=-1, deterministic=True, force_row_wise=True)
+        clf.fit(Xtr_l, ytr, eval_set=[(Xva_l, yva)], eval_metric="auc",
+                callbacks=[lgb.early_stopping(100, verbose=False)])
+        m = LGBMModel(clf, cats)
+        auc = roc_auc_score(yva, m.predict_proba(Xva)[:, 1])
+        grid.append({"modele": "lgbm", "hyperparametres": f"num_leaves={leaves}, arbres={clf.best_iteration_}",
+                     "AUROC_val_brut": auc, "duree_s": time.time() - t})
+        cands["lgbm"].append((auc, m))
+        print(grid[-1], flush=True)
     g = pd.DataFrame(grid)
     g["retenu"] = g.groupby("modele")["AUROC_val_brut"].transform("max") == g["AUROC_val_brut"]
     g.to_csv(ROOT / "reports/reglage_hyperparametres.csv", index=False)
     logreg = max(cands["logreg"], key=lambda x: x[0])[1]
     ebm = max(cands["ebm"], key=lambda x: x[0])[1]
+    lgbm = max(cands["lgbm"], key=lambda x: x[0])[1]
+    fitted = {"logreg": logreg, "ebm": ebm, "lgbm": lgbm}
 
-    raw = {"logreg": logreg.predict_proba(Xva)[:, 1], "ebm": ebm.predict_proba(Xva)[:, 1]}
+    raw = {n: fitted[n].predict_proba(Xva)[:, 1] for n in MODELS}
     rows, cal_val, calibrators = [], {}, {}
     for name, p in raw.items():
         cal_val[name] = crossfit_isotonic(p, yva)                 # évaluation honnête
@@ -123,16 +155,16 @@ def main():
     val.to_csv(ROOT / "reports/metriques_validation.csv")
     print(val.round(4).to_string(), flush=True)
 
-    # --- choix du modèle sur VALIDATION uniquement : plus faible Brier calibré (la proba sert au MCDA)
+    # --- choix du modèle sur VALIDATION uniquement, parmi les modèles interprétables : plus faible Brier calibré
     cal_rows = val.xs("calibre", level="version")
-    chosen = cal_rows["Brier"].idxmin()
-    print("modèle retenu (Brier calibré le plus bas sur validation):", chosen, flush=True)
+    chosen = cal_rows.loc[INTERPRETABLE, "Brier"].idxmin()
+    print("modèle retenu (interprétable, Brier calibré le plus bas sur validation):", chosen, flush=True)
 
     # --- test : lu une seule fois, après le choix
     Xte, yte, _ = load_split("test")
     yte = yte.values
     rows = []
-    for name, model in [("logreg", logreg), ("ebm", ebm)]:
+    for name, model in fitted.items():
         p_raw = model.predict_proba(Xte)[:, 1]
         p_cal = calibrators[name].predict(p_raw)
         thr = best_f1_threshold(yva, cal_val[name])               # seuil fixé sur validation
@@ -144,13 +176,14 @@ def main():
 
     # --- courbes de calibration (validation puis test)
     plot_calibration(yva, cal_val, yte, {n: calibrators[n].predict(m.predict_proba(Xte)[:, 1])
-                                         for n, m in [("logreg", logreg), ("ebm", ebm)]})
+                                         for n, m in fitted.items()})
 
-    joblib.dump({"logreg": logreg, "ebm": ebm, "calibrators": calibrators, "chosen": chosen,
+    joblib.dump({"logreg": logreg, "ebm": ebm, "lgbm": lgbm, "calibrators": calibrators, "chosen": chosen,
                  "features": FEATURES, "seuil_F1": {n: best_f1_threshold(yva, cal_val[n]) for n in cal_val}},
                 ROOT / "models/risk_models.joblib", compress=3)
     (ROOT / "reports/modele_retenu.json").write_text(json.dumps(
-        {"modele_retenu": chosen, "critere": "Brier calibré le plus bas sur validation",
+        {"modele_retenu": chosen, "critere": "Brier calibré le plus bas sur validation, parmi les modèles interprétables",
+         "reference_boite_noire": "lgbm",
          "taux_defaut_train": float(ytr.mean()), "taux_defaut_validation": float(yva.mean()),
          "remarque": "pd_ml est calibrée sur la validation : le taux de référence cohérent pour le filtre est celui "
                      "de la validation (le taux d'entraînement inclut la crise de 2008)."}, indent=2, ensure_ascii=False),

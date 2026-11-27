@@ -8,14 +8,22 @@ from common import R
 
 def render():
     common.page_header("Référence", "Modèle de risque",
-                       "Probabilité de défaut à 60 mois des prêts SBA 7(a) : régression logistique contre EBM, entraînés "
-                       "sur 2000-2012, calibrés sur 2013-2014, testés une seule fois sur 2015-2016.")
+                       "Probabilité de défaut à 60 mois des prêts SBA 7(a) : régression logistique (baseline), EBM "
+                       "(avancé, interprétable) et LightGBM (avancé, boîte noire), entraînés sur 2000-2012, calibrés sur "
+                       "2013-2014, testés une seule fois sur 2015-2016. Le modèle utilisé est choisi parmi les modèles "
+                       "interprétables ; LightGBM mesure ce que coûte l'interprétabilité.")
     test = pd.read_csv(R / "metriques_test.csv")
     ebm = test[(test.modele == "ebm") & (test.version == "calibre")].iloc[0]
     lr = test[(test.modele == "logreg") & (test.version == "calibre")].iloc[0]
-    common.kpis([("AUROC test · EBM", f"{ebm.AUROC:.3f}", f"logistique : {lr.AUROC:.3f}"),
-                 ("AUPRC test · EBM", f"{ebm.AUPRC:.3f}", f"logistique : {lr.AUPRC:.3f}"),
-                 ("Brier test · EBM", f"{ebm.Brier:.4f}", f"logistique : {lr.Brier:.4f}"),
+    gb = test[(test.modele == "lgbm") & (test.version == "calibre")]
+    gb = gb.iloc[0] if len(gb) else None
+
+    def other(col, f):
+        txt = f"logistique : {lr[col]:{f}}"
+        return txt + (f" · LightGBM : {gb[col]:{f}}" if gb is not None else "")
+    common.kpis([("AUROC test · EBM", f"{ebm.AUROC:.3f}", other("AUROC", ".3f")),
+                 ("AUPRC test · EBM", f"{ebm.AUPRC:.3f}", other("AUPRC", ".3f")),
+                 ("Brier test · EBM", f"{ebm.Brier:.4f}", other("Brier", ".4f")),
                  ("Probabilité moyenne prédite", f"{100 * ebm.pd_moyenne:.2f} %",
                   f"taux réel : {100 * ebm.taux_defaut_reel:.2f} %", common.GREY)])
     fmt = {c: st.column_config.NumberColumn(c, format="%.4f")
@@ -31,9 +39,12 @@ def render():
     if hp.exists():
         with st.expander("Réglage des hyperparamètres (sur la validation)", icon=":material/tune:"):
             st.dataframe(pd.read_csv(hp).round(4), hide_index=True, width="stretch")
-    st.image(str(R / "calibration.png"), caption="Calibration : logistique vs EBM (validation puis test)")
+    st.image(str(R / "calibration.png"), caption="Calibration des trois modèles (validation puis test)")
     i1, i2 = st.columns(2)
     i1.image(str(R / "importance_variables.png"), caption="Importance native EBM et par permutation (validation)")
     i2.image(str(R / "ebm_effets.png"), caption="Effet des variables principales (EBM)")
+    if (R / "shap_lightgbm.png").exists():
+        st.image(str(R / "shap_lightgbm.png"), caption="LightGBM : contribution moyenne des variables (valeurs SHAP)",
+                 width=640)
     with st.expander("Erreurs par secteur, État et procédure (validation)", icon=":material/error:"):
         st.dataframe(pd.read_csv(R / "erreurs_par_segment_validation.csv").round(3), hide_index=True, width="stretch")

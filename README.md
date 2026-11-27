@@ -34,7 +34,7 @@ Les fichiers SBA et Damodaran ne sont pas dans Git (trop lourds) : les télécha
 ```bash
 cd src
 python data_prep.py              # 1. cible default_60m + découpage train/val/test
-python models.py                 # 2-3. réglage, logistique + EBM, calibration, métriques (~10 min)
+python models.py                 # 2-3. réglage, logistique + EBM + LightGBM, calibration, métriques (~10 min)
 python export_pd.py              # 5. pd_ml de chaque prêt du test
 python simulate.py               # 6. 40 prêts + indicateurs simulés (graine 2026)
 python project_scores.py         # 7. table project_scores (40 lignes : identifiant + 8 critères, sans valeur manquante)
@@ -49,11 +49,13 @@ streamlit run app/app.py         # 10. application
 
 ## Journal des données
 
-| Fichier | Source | Taille (lue sur le disque) | Date de téléchargement | Traitement |
+| Fichier | Source (vérifiée le 27/11/2026) | Taille (lue sur le disque) | Date de téléchargement | Traitement |
 |---|---|---|---|---|
-| `data/raw/FOIA_7a_FY2000_FY2009_asof_260930.xlsx` | SBA 7(a) FOIA (données au 30/09/2026) | 172 673 904 octets | 2026-11-16 (date du fichier) | converti en `data/processed/sba_7a_FY2000_FY2009.parquet`, puis `data_prep.py` |
-| `data/raw/FOIA_7a_FY2010_FY2019_asof_260930.xlsx` | SBA 7(a) FOIA (données au 30/09/2026) | 142 802 089 octets | 2026-11-16 (date du fichier) | idem (FY2010-FY2019) |
-| `data/external/wacc.xlsx` | Damodaran, « Cost of Capital by Industry » (US) | 34 266 octets | 2026-11-16 (date du fichier) | lu par `src/damodaran.py` ; sert à la simulation |
+| `data/raw/FOIA_7a_FY2000_FY2009_asof_260930.xlsx` | SBA, [7(a) & 504 FOIA](https://data.sba.gov/en/dataset/7-a-504-foia), fichier « FOIA - 7(a) (FY2000-FY2009) », instantané au 30/09/2026 | 172 673 904 octets | 2026-11-16 (date du fichier) | converti en `data/processed/sba_7a_FY2000_FY2009.parquet`, puis `data_prep.py` |
+| `data/raw/FOIA_7a_FY2010_FY2019_asof_260930.xlsx` | même page, « FOIA - 7(a) (FY2010-FY2019) », instantané au 30/09/2026 | 142 802 089 octets | 2026-11-16 (date du fichier) | idem (FY2010-FY2019) |
+| `data/external/wacc.xlsx` | Damodaran, [Cost of Equity and Capital (US)](https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/wacc.html), tableur [wacc.xls](https://www.stern.nyu.edu/~adamodar/pc/datasets/wacc.xls) enregistré en .xlsx | 34 266 octets | 2026-11-16 (date du fichier) | lu par `src/damodaran.py` ; sert à la simulation |
+
+La SBA publie un nouvel instantané chaque trimestre (fichiers en csv sur le portail ; `data_prep.py` lit indifféremment le xlsx ou le csv du même nom) : un instantané plus récent donne des chiffres légèrement différents, car les statuts des prêts évoluent. Fiche du jeu sur data.gov : [SBA 7(a) and 504 Loan Data Reports](https://catalog.data.gov/dataset/sba-7a-and-504-loan-data-reports). Les données SBA sont des « U.S. Government Works » (domaine public).
 
 ## Résultats (chaque chiffre vient d'une exécution ; sources : `data/processed/*.csv|json`, `reports/*.csv`, `params/*`)
 
@@ -69,14 +71,15 @@ L'entraînement contient la crise de 2008 : le taux de défaut y est environ 3 f
 
 **Fuite détectée et corrigée (hors liste initiale).** `TermInMonths` exact est altéré après l'octroi pour les prêts en défaut : sur le test, une durée non ronde donne 19,0 % de défaut contre 0,44 % pour une durée ronde (12, 24, 36, 60, 84, 120 mois…). Avec la durée fine, un test rapide donnait un AUROC de 0,96 sur la validation (contre 0,81 avec 5 tranches, 0,79 avec 3 tranches, 0,67 sans durée) : faux. La durée est donc remplacée par **3 tranches** (≤ 60, 61-120, > 120 mois), **dans le modèle comme dans la simulation** (durée standard de 5, 10 ou 25 ans par tranche). C'est un écart assumé par rapport à la décision 1 (« durée »), à valider en équipe. `InitialInterestRate` a été audité de la même façon (valeurs rondes / non rondes, décimales) : aucune anomalie liée au défaut.
 
-**Modèles de risque (mêmes 13 variables, sans `JobsSupported` ni `CollateralInd`).** Ces deux champs servent déjà de critères MCDA (emplois, couverture par les garanties) : les garder dans le modèle compterait deux fois le même fait. Réglage court sur la validation (`reports/reglage_hyperparametres.csv`) : logistique `C = 0,01` ; EBM 10 interactions. Calibration isotonique ajustée sur la validation ; seuil F1 choisi sur la validation ; test lu une fois après le choix.
+**Modèles de risque (mêmes 13 variables, sans `JobsSupported` ni `CollateralInd`).** Ces deux champs servent déjà de critères MCDA (emplois, couverture par les garanties) : les garder dans le modèle compterait deux fois le même fait. Trois modèles : **régression logistique** (baseline simple), **EBM** (avancé et interprétable) et **LightGBM** (avancé, « boîte noire », variables catégorielles natives, arrêt anticipé sur la validation). Réglage court sur la validation (`reports/reglage_hyperparametres.csv`) : logistique `C = 0,01` ; EBM 10 interactions ; LightGBM 127 feuilles, 147 arbres. Calibration isotonique ajustée sur la validation ; seuil F1 choisi sur la validation ; test lu une fois après le choix.
 
 | Version calibrée | AUROC val | AUPRC val | F1 val | Brier val | AUROC test | AUPRC test | F1 test | Brier test |
 |---|---|---|---|---|---|---|---|---|
 | Régression logistique | 0,7326 | 0,1399 | 0,2146 | 0,03249 | 0,7261 | 0,1592 | 0,2393 | 0,0380 |
 | **EBM (retenu)** | 0,7669 | 0,1355 | 0,2236 | 0,03248 | 0,7777 | 0,1698 | 0,2468 | 0,0379 |
+| LightGBM (référence) | 0,7929 | 0,1729 | 0,2421 | 0,03180 | 0,7998 | 0,2002 | 0,2821 | 0,0370 |
 
-Le modèle est retenu sur la validation (Brier calibré le plus bas). L'écart de Brier est négligeable ; l'écart d'AUROC (+0,034 en validation, +0,052 en test) est net. **Limite** : la probabilité moyenne prédite sur le test est de 3,52 % pour un taux réel de 4,25 % (dérive entre périodes) : `pd_ml` sous-estime légèrement le risque en 2015-2016. Courbes : `reports/calibration.png`.
+**Règle de choix, fixée avant d'entraîner LightGBM** : le modèle utilisé est le plus bas Brier calibré sur la validation **parmi les modèles interprétables** (logistique, EBM), car une banque doit pouvoir expliquer un refus de crédit ; LightGBM n'est pas candidat, il mesure ce que coûte l'interprétabilité. Il est le meilleur partout, mais l'écart avec l'EBM reste modéré (+0,022 d'AUROC et +0,030 d'AUPRC sur le test), alors que l'EBM fait nettement mieux que la baseline (+0,052 d'AUROC). L'EBM est retenu ; son explication est native, alors que LightGBM demande une explication a posteriori (valeurs SHAP : `reports/shap_lightgbm.png`, où le taux initial et la durée dominent aussi). **Limite** : la probabilité moyenne prédite par l'EBM sur le test est de 3,52 % pour un taux réel de 4,25 % (dérive entre périodes) : `pd_ml` sous-estime légèrement le risque en 2015-2016. Courbes : `reports/calibration.png`.
 
 **Interprétabilité (sur la validation, pour ne pas relire le test).** Variables les plus importantes (permutation, baisse d'AUROC) : tranche de durée (0,189), taux initial (0,030), montant (0,027), ligne renouvelable (0,023), procédure (0,017). Erreurs par secteur, État et procédure : `reports/erreurs_par_segment_validation.csv`. Avec le seuil F1, le modèle manque une majorité des défauts (taux de faux négatifs de 57 % à 100 % selon l'État) : il sert à classer et à estimer une probabilité, pas à détecter chaque défaut. Le test ne sert qu'aux métriques finales et aux explications locales des 40 projets (qui sont des prêts du test).
 
