@@ -21,3 +21,15 @@ __pycache__/
 !models/*.joblib
 !reports/
 !params/
+
+# Rapport : archive pour Overleaf et fichiers de compilation LaTeX
+rapport/*.zip
+rapport/*.aux
+rapport/*.log
+rapport/*.out
+rapport/*.toc
+rapport/*.lof
+rapport/*.lot
+rapport/*.bbl
+rapport/*.blg
+rapport/*.pdf

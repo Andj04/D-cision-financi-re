@@ -1,0 +1,14 @@
+\begin{table}[htbp]
+\centering
+\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Performances des trois modèles (versions calibrées). Taux de défaut réel : 3,57\,\% en validation, 4,25\,\% en test}\label{tab:modeles}
+\begin{tabular}{lccccccc}
+\toprule
+Modèle (calibré) & AUROC val. & Brier val. & AUROC test & AUPRC test & F1 test & Brier test & PD moy. test \\
+\midrule
+Régression logistique & 0,733 & 0,0325 & 0,726 & 0,159 & 0,239 & 0,0380 & 3,67\,\% \\
+\textbf{EBM (retenu)} & 0,767 & 0,0325 & 0,778 & 0,170 & 0,247 & 0,0379 & 3,52\,\% \\
+LightGBM (référence) & 0,793 & 0,0318 & 0,800 & 0,200 & 0,282 & 0,0370 & 3,59\,\% \\
+\bottomrule
+\end{tabular}
+\end{table}

@@ -1,0 +1,253 @@
+% =============================================================================================
+\chapter{Méthodologie et architecture}\label{chap:methodo}
+
+% ---------------------------------------------------------------------------------------------
+\section{Architecture du système}
+
+La figure~\ref{fig:chaine} présente la chaîne de décision. À gauche, les données réelles et le modèle de risque ;
+à droite, les paramètres sectoriels et la simulation ; les deux se rejoignent dans une table de huit critères par
+projet, qui alimente le filtre, la méthode multicritère, l'arbitrage budgétaire et les agents de rédaction, avant la
+décision humaine.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  font=\small,
+  box/.style={draw=eccgris,rounded corners=3pt,align=center,minimum height=1.05cm,text width=5.6cm,fill=white},
+  key/.style={box,draw=eccvert,line width=1pt,fill=eccclair},
+  arr/.style={-{Stealth[length=2.2mm]},eccgris,thick},
+  node distance=0.55cm]
+  \node[box] (sba) {\textbf{Données SBA 7(a)}\\ 910\,033 prêts réels, 2000-2016};
+  \node[box,right=0.9cm of sba] (dam) {\textbf{Paramètres Damodaran}\\ coût du capital, dette, par secteur};
+  \node[box,below=of sba] (ml) {\textbf{Modèle de risque}\\ EBM calibré : probabilité de défaut};
+  \node[box,below=of dam] (sim) {\textbf{Simulation des 40 projets}\\ VAN, délai, DSCR, levier, garanties, ESG};
+  \coordinate (milieu) at ($(ml.south)!0.5!(sim.south)$);
+  \node[box,below=0.55cm of milieu,text width=12.2cm] (scores) {\textbf{Table des critères}\\
+        8 critères pour chacun des 40 projets (risque issu du ML + 7 indicateurs)};
+  \node[box,below=of scores,text width=12.2cm] (filtre) {\textbf{Agent de conformité : filtre éliminatoire}\\
+        DSCR $< 1$ ou probabilité de défaut $> 7{,}1\,\%$ : Refuser};
+  \node[key,below=of filtre,text width=12.2cm] (mcda) {\textbf{Moteur MCDA (déterministe)}\\
+        poids AHP ; ELECTRE III (classement) ; ELECTRE TRI (catégorie) ; PROMETHEE II (vérification)};
+  \node[box,below=of mcda,xshift=-3.3cm,text width=5.6cm] (rob) {\textbf{Agent de robustesse}\\
+        200 scénarios de paramètres, 20 tirages};
+  \node[box,below=of mcda,xshift=3.3cm,text width=5.6cm] (arb) {\textbf{Agent d'arbitrage}\\
+        budget, bornes, plafond sectoriel};
+  \node[box,below=2.2cm of mcda,text width=12.2cm] (llm) {\textbf{Agents fondés sur un LLM}\\
+        agent rédacteur (note par projet) et conseiller (questions, outils) ; aucun calcul};
+  \node[key,below=of llm,text width=7cm] (comite) {\textbf{Comité d'investissement}\\ fixe les paramètres, décide};
+  \draw[arr] (sba) -- (ml);
+  \draw[arr] (dam) -- (sim);
+  \draw[arr,dashed] (sba.east) -- ++(0.45,0) |- node[pos=0.25,right,font=\scriptsize,text=eccgris]{40 prêts du test} (sim.west);
+  \draw[arr] (ml) -- (ml|-scores.north);
+  \draw[arr] (sim) -- (sim|-scores.north);
+  \draw[arr] (scores) -- (filtre);
+  \draw[arr] (filtre) -- (mcda);
+  \draw[arr] (mcda.south-|rob.north) -- (rob);
+  \draw[arr] (mcda.south-|arb.north) -- (arb);
+  \draw[arr] (rob) -- (rob|-llm.north);
+  \draw[arr] (arb) -- (arb|-llm.north);
+  \draw[arr] (llm) -- (comite);
+\end{tikzpicture}
+\caption{Chaîne de décision : le ML estime le risque, le MCDA classe et catégorise, l'arbitrage respecte le budget,
+les agents LLM rédigent, le comité décide.}
+\label{fig:chaine}
+\end{figure}
+
+\subsection{De l'architecture proposée à l'architecture réalisée}
+
+Le sujet proposait une architecture à neuf composantes. Le tableau~\ref{tab:archi} indique, pour chacune, ce qui a
+été réalisé et les écarts. Conformément au sujet, le moteur MCDA est un outil déterministe et non un agent : seuls
+la rédaction et le dialogue reposent sur un modèle de langage.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{Architecture proposée par le sujet et réalisation}\label{tab:archi}
+\begin{tabularx}{\textwidth}{>{\raggedright\arraybackslash}p{3.4cm}X>{\raggedright\arraybackslash}p{2.1cm}}
+\toprule
+Composante proposée & Réalisation dans le projet & Statut \\
+\midrule
+1. Agent extracteur (lecture de dossiers) & Non réalisé : nos dossiers sont des données structurées. L'import d'un
+fichier CSV ou Excel et le calcul automatique de la probabilité de défaut jouent ce rôle. & Écart assumé \\
+2. Agent de conformité & Filtre éliminatoire à règles (DSCR, risque), configurable. & Réalisé \\
+3. Agents d'analyse par dimension & Modèle de risque (EBM) et facteurs de risque par projet ; VAN, délai et DSCR
+calculés par la simulation. Le TRI et la détection d'anomalies ne sont pas calculés. & Réalisé en partie \\
+4. Validation par les analystes & Page de configuration : critères, poids, jugements AHP, profils et filtre
+modifiables avant le calcul. & Réalisé \\
+5. Moteur MCDA & AHP, ELECTRE III, ELECTRE TRI, PROMETHEE II, implémentés en Python et testés à la main. & Réalisé \\
+6. Agent d'arbitrage & Sélection sous budget, bornes de montant et plafond sectoriel (deux règles). & Réalisé \\
+7. Agent de robustesse & 200 scénarios de paramètres, 20 tirages de simulation, scénarios « et si » du conseiller. &
+Réalisé \\
+8. Agent rédacteur & Note par projet par LLM, avec vérification des nombres et note de repli sans LLM. & Réalisé \\
+9. Comité d'investissement & Paramètres fixés en amont dans la configuration ; décision humaine en aval. & Réalisé \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+% ---------------------------------------------------------------------------------------------
+\section{Modèle de risque}
+
+\subsection{Protocole}
+
+\begin{enumerate}
+  \item Les trois modèles sont entraînés sur 2000-2012 avec les mêmes 13 variables.
+  \item Leurs hyperparamètres sont choisis sur l'AUROC de validation, par une grille volontairement courte
+        (tableau~\ref{tab:hyper}) : quatre valeurs de $C$ pour la logistique, deux nombres d'interactions pour l'EBM,
+        deux nombres de feuilles pour LightGBM, dont le nombre d'arbres est fixé par arrêt anticipé (100 tours sans
+        amélioration).
+  \item Chaque modèle est calibré par régression isotonique ajustée sur la validation. Pour mesurer honnêtement la
+        calibration sur la validation elle-même, on utilise une calibration croisée en cinq blocs.
+  \item Le seuil F1 est choisi sur la validation.
+  \item Le modèle retenu est choisi sur la validation, selon une règle fixée \emph{avant} d'entraîner LightGBM.
+  \item Le test (2015-2016) est lu une seule fois, après le choix, pour les métriques finales.
+\end{enumerate}
+
+\input{tables/tab_hyper}
+
+\subsection{Règle de choix du modèle}
+
+\begin{encadre}[Règle de choix]
+Le modèle utilisé est celui dont le score de Brier calibré est le plus bas sur la validation, \textbf{parmi les
+modèles interprétables} (régression logistique et EBM). Le Brier est retenu parce que le MCDA utilise la valeur de la
+probabilité ; l'interprétabilité est exigée parce qu'une banque doit pouvoir expliquer un refus de crédit.
+LightGBM n'est pas candidat : il sert d'étalon pour mesurer ce que coûte l'interprétabilité.
+\end{encadre}
+
+% ---------------------------------------------------------------------------------------------
+\section{Simulation des 40 projets candidats}\label{sec:simulation}
+
+\subsection{Principe}
+
+Les 40 projets sont de vrais prêts tirés au hasard dans le bloc de test (graine fixe 2026), que le modèle n'a jamais
+vus. Leur probabilité de défaut est celle du modèle ; leurs indicateurs financiers sont simulés. La vraie issue du
+prêt est retirée du tableau avant le tirage, si bien que la simulation ne peut pas l'utiliser. Le nombre de 40 permet
+de voir l'effet du veto ($40 \times 39 = 1\,560$ comparaisons) tout en restant lisible.
+
+\subsection{Étapes}
+
+\begin{enumerate}
+  \item \textbf{Secteur} : chaque code NAICS à deux chiffres est rattaché à un secteur de Damodaran par une table
+        faite à la main (tableau~\ref{tab:damodaran} en annexe) ; les cas flous prennent la moyenne du marché.
+  \item \textbf{Paramètres} : le taux d'actualisation est le coût du capital du secteur, tiré à $\pm$\,20\,\% ; la
+        croissance des flux est une hypothèse d'équipe par secteur, elle aussi tirée à $\pm$\,20\,\%.
+  \item \textbf{Financement} : la dette représente entre 50 et 80\,\% de l'investissement ; le levier dette sur fonds
+        propres est donc compris entre 1 et 4.
+  \item \textbf{DSCR piloté} : 8 projets \og faibles \fg{} (DSCR minimum tiré entre 0,8 et 1,0), 24 \og moyens \fg{}
+        (1,0 à 1,5) et 8 \og solides \fg{} (1,5 à 2,0), soit 20\,/\,60\,/\,20\,\%. Les flux annuels croissent avec un
+        bruit de 5\,\%, puis sont mis à l'échelle pour que le pire DSCR tombe exactement sur la valeur tirée.
+  \item \textbf{VAN et délai} : dix années de flux explicites, une valeur résiduelle en perpétuité sans croissance
+        réduite de moitié par prudence ; la durée du prêt est la durée standard de sa tranche (5, 10 ou 25 ans).
+  \item \textbf{Garanties} : couverture nulle si le prêt réel n'avait pas de garantie, sinon tirée entre 0,5 et 1,5.
+  \item \textbf{ESG} : une classe A, B ou C tirée selon le groupe de secteurs (industrie plutôt A ou B, services plutôt
+        C), puis une note autour de 30, 60 ou 85 avec un bruit de 5 points.
+  \item \textbf{Emplois par million} : nombre réel d'emplois soutenus divisé par le montant en millions de dollars.
+\end{enumerate}
+
+\begin{encadre}[Ce qui est sourcé et ce qui est un choix]
+Le coût du capital (Damodaran) et les repères de DSCR (1,25 ; 1,3 à 1,4 dans l'énergie~\cite{nrel2024}) sont
+sourcés. Les autres paramètres (croissance, horizon, décote de la valeur résiduelle, bruit, bornes de dette et de
+garantie, centres ESG, durées standard) sont des hypothèses d'équipe, testées en sensibilité. Chaque projet reçoit
+enfin un nom lisible et fictif (« Cabinet dentaire Baker ») : l'activité vient du vrai code NAICS, le nom de famille
+d'une liste fixe ; aucun vrai nom d'emprunteur n'est utilisé.
+\end{encadre}
+
+% ---------------------------------------------------------------------------------------------
+\section{Paramétrage de la méthode multicritère}
+
+\subsection{Critères, poids et profils}
+
+Le tableau~\ref{tab:criteres} donne les huit critères, leur sens, leurs poids et les profils d'ELECTRE TRI. Les poids
+cibles traduisent l'ordre de priorité d'une banque : d'abord le remboursement (risque, DSCR), puis la rentabilité,
+puis la protection (garanties, levier), enfin l'impact (ESG, emplois). Les 28 jugements de l'AHP
+(tableau~\ref{tab:ahp} en annexe) ont été initialisés en arrondissant à l'échelle de Saaty les rapports de ces poids
+cibles ; ils sont modifiables dans l'application.
+
+\input{tables/tab_criteres}
+
+Les profils sont \emph{absolus} lorsqu'un repère existe (probabilité de défaut rapportée au taux de référence,
+DSCR de 1 et 1,25, levier, garanties couvrant la moitié puis la totalité du prêt, ESG), afin qu'une catégorie traduise
+un standard de crédit plutôt qu'un rang dans le lot. Ils sont relatifs (tertiles du lot) quand aucun repère externe
+n'existe.
+
+\subsection{Filtre éliminatoire}
+
+Avant le classement, un projet est écarté si son DSCR minimum est inférieur à 1 ou si sa probabilité de défaut dépasse
+deux fois le taux de défaut de référence. Le veto d'ELECTRE est relatif (il empêche $a$ de surclasser $b$ si $b$ est
+bien meilleur sur un critère) et n'élimine pas un projet dans l'absolu : un seuil absolu doit donc être un filtre.
+
+\begin{encadre}[Adaptation du taux de référence]
+La règle prévoyait \og 2 fois le taux de défaut moyen de l'entraînement \fg{}, soit $2 \times 13{,}48\,\% = 27\,\%$.
+Or la probabilité de défaut est calibrée sur 2013-2014 : aucun des 40 projets ne dépasse 18\,\%, et le filtre ne se
+déclenchait jamais. Comparer une probabilité d'une période à un taux d'une autre période étant incohérent, le taux de
+référence retenu est celui de la validation (3,57\,\%), soit un seuil de 7,1\,\%.
+\end{encadre}
+
+\subsection{Seuils, coupure et robustesse}
+
+Les seuils d'ELECTRE III et de PROMETHEE II sont exprimés en pourcentage de l'étendue observée de chaque critère :
+$q = 5\,\%$, $p = 20\,\%$, $v = 50\,\%$. La coupure d'ELECTRE TRI vaut $\lambda = 0{,}6$ et la règle d'affectation est
+pessimiste. La robustesse est mesurée de trois façons : un paramètre à la fois (quatre jeux de seuils, six valeurs de
+$\lambda$) ; 200 scénarios combinés tirant les poids à $\pm$\,30\,\%, les seuils dans les plages testées et $\lambda$
+entre 0,5 et 0,8 (une décision est \og fragile \fg{} si sa catégorie change dans au moins 25\,\% des scénarios) ;
+et 20 nouveaux tirages des indicateurs simulés pour les mêmes 40 prêts.
+
+% ---------------------------------------------------------------------------------------------
+\section{Agent d'arbitrage}
+
+L'arbitrage reçoit les catégories du MCDA et choisit les projets à financer sous un budget global, des montants
+minimum et maximum par projet et une part maximale par secteur. Pour la démonstration : budget de 5\,M\$, montants
+de 20\,000\,\$ à 2\,M\$ et 35\,\% du budget au plus par secteur. Les projets \og Financer \fg{} passent d'abord, puis,
+si on l'autorise, les projets \og sous conditions \fg{}. Deux règles sont proposées (section~\ref{sec:theorie-budget}) :
+
+\begin{itemize}
+  \item \textbf{suivre le classement} (règle par défaut) : on parcourt les projets dans l'ordre de priorité du comité
+        (catégorie, puis rang ELECTRE III) et l'on retient chacun s'il respecte encore les trois contraintes. C'est
+        l'optimum exact lorsque tout projet mieux classé doit passer avant les autres, et chaque projet écarté reçoit
+        un motif précis ;
+  \item \textbf{maximiser le nombre} : programme linéaire en nombres entiers qui retient le plus de projets
+        \og Financer \fg{}, puis \og sous conditions \fg{}, puis, à nombre égal, les mieux classés.
+\end{itemize}
+
+% ---------------------------------------------------------------------------------------------
+\section{Agents fondés sur un modèle de langage}
+
+\subsection{Agent rédacteur}
+
+Pour chaque projet, Python rassemble les \og faits \fg{} déjà calculés et formatés : catégorie, rangs, huit critères,
+motif d'exclusion, fragilité, facteurs de risque, statut budgétaire. Le LLM reçoit ces faits avec la consigne de les
+recopier sans en créer et rédige une note de six à neuf phrases pour le comité. Un vérificateur extrait tous les nombres
+de la note : si un seul n'appartient pas aux faits, la note est rejetée et remplacée par une note de gabarit, écrite
+sans LLM.
+
+\subsection{Conseiller conversationnel}
+
+Le conseiller répond en français aux questions sur les projets, les résultats, des scénarios et la méthode. Il ne voit
+pas les données : il dispose de dix outils, des fonctions Python déterministes décrites par un schéma
+(tableau~\ref{tab:outils}), et rédige à partir de leurs résultats. Sous chaque réponse, l'utilisateur voit les outils
+appelés et leurs résultats bruts.
+
+\begin{table}[htbp]
+\centering\footnotesize
+\caption{Outils du conseiller}\label{tab:outils}
+\begin{tabularx}{\textwidth}{>{\ttfamily}p{3.6cm}X}
+\toprule
+\normalfont Outil & Rôle \\
+\midrule
+capacites & ce que le conseiller sait faire, ses limites et les méthodes réellement utilisées \\
+resume\_resultats & vue d'ensemble : catégories, exclusions, poids, meilleurs projets, fragilité \\
+lister\_projets & liste filtrée et triée (catégorie, texte, critère) \\
+fiche\_projet & tous les faits d'un projet, éventuellement sous un scénario de poids, de coupure ou sans filtre \\
+comparer\_projets & deux à six projets critère par critère \\
+statistiques & moyenne, médiane, minimum, maximum d'un critère, par groupe \\
+simuler\_scenario & relance le MCDA avec d'autres poids, une autre coupure ou sans filtre \\
+arbitrage\_budget & sélection sous budget, avec simulation d'un autre budget \\
+parametres\_methode & paramètres réels et explication de la méthode \\
+donnees\_historiques & données SBA : taux de défaut, audit, métriques et erreurs du modèle \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Deux contrôles automatiques complètent l'appel d'outils. Chaque nombre de la réponse doit figurer dans les résultats
+des outils consultés, sinon un avertissement s'affiche. Toute méthode citée mais non utilisée (par exemple une variante
+d'ELECTRE inventée par le modèle) déclenche aussi un avertissement. Le fournisseur est Google Gemini, dans son offre
+gratuite ; l'application bascule automatiquement sur d'autres modèles en cas de saturation, et fonctionne sans LLM
+(notes de gabarit, questions rapides) si aucune clé n'est configurée.

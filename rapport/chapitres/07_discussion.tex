@@ -1,0 +1,102 @@
+% =============================================================================================
+\chapter{Discussion}\label{chap:discussion}
+
+% ---------------------------------------------------------------------------------------------
+\section{Justification des choix}
+
+Le tableau~\ref{tab:choix} rassemble les principaux choix, l'alternative écartée et la raison du choix.
+
+\begin{center}
+\footnotesize
+\begin{longtable}{>{\raggedright\arraybackslash}p{3.6cm}>{\raggedright\arraybackslash}p{3.2cm}>{\raggedright\arraybackslash}p{7.4cm}}
+\caption{Choix de conception et justifications}\label{tab:choix}\\
+\toprule
+Choix & Alternative écartée & Raison \\
+\midrule
+\endfirsthead
+\toprule
+Choix & Alternative écartée & Raison \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Prêts SBA réels & données entièrement simulées & le risque doit être appris sur de vrais défauts ; données publiques et volumineuses \\
+Défaut à 60 mois & perte à toute date & horizon d'un crédit d'investissement ; une perte tardive ne dépend plus du dossier \\
+Séparation par année & tirage au hasard & une banque prédit le futur avec le passé \\
+Test lu une seule fois & réglages vérifiés sur le test & éviter de choisir sans le vouloir ce qui réussit sur le test \\
+Trois tranches de durée & durée exacte & la durée exacte est modifiée après un défaut (fuite) \\
+Sans emplois ni garanties dans le modèle & toutes les variables & ce sont des critères MCDA : éviter le double comptage \\
+Trois modèles, choix parmi les interprétables & choisir le plus performant & une banque doit expliquer un refus ; LightGBM mesure le prix de ce choix \\
+Calibration isotonique & probabilités brutes & le MCDA utilise la probabilité ; les données d'entraînement incluent la crise \\
+Pas de rééquilibrage des classes & sur- ou sous-échantillonnage & préserver des probabilités fidèles \\
+Indicateurs simulés et documentés & indicateurs réels & aucune base ouverte ne relie comptes du projet et issue du prêt \\
+AHP & poids posés directement & méthode reconnue qui contrôle la cohérence \\
+Filtre éliminatoire & tout passer dans le classement & certaines conditions sont des couperets (ne pas pouvoir payer ses échéances) \\
+Seuil de risque sur le taux de validation & taux d'entraînement & cohérence avec la période de calibration ; sinon le filtre est inopérant \\
+ELECTRE III et TRI & somme pondérée & non-compensation : un risque élevé n'est pas racheté par une bonne VAN \\
+Règle TRI pessimiste & règle optimiste & prudence bancaire \\
+Profils absolus quand c'est possible & tertiles du lot & une catégorie doit traduire un standard, pas un rang \\
+PROMETHEE II en complément & une seule méthode & vérifier que le classement ne dépend pas de la méthode \\
+$\lambda$ entre 0,5 et 0,8 dans les scénarios & $\lambda$ jusqu'à 1 & $\lambda = 1$ exige l'unanimité, cas extrême montré à part \\
+Arbitrage \og suivre le classement \fg{} & maximiser le nombre de projets & ne pas écarter le meilleur projet au profit de petits projets \\
+Le LLM ne calcule pas & laisser le LLM analyser & un LLM peut inventer des chiffres ; chaque chiffre doit être traçable \\
+Outils et vérificateur & confiance dans le LLM & chaque nombre est contrôlé automatiquement \\
+Gemini gratuit & API payante & budget nul d'un projet étudiant \\
+Application configurable & application figée & réutiliser la méthode sur de vraies données \\
+\end{longtable}
+\end{center}
+
+% ---------------------------------------------------------------------------------------------
+\section{Limites}
+
+\paragraph{Indicateurs simulés.} C'est la limite principale : les catégories des 40 projets ne sont stables que dans
+48\,\% des tirages de simulation. La démonstration valide la \emph{méthode} et la chaîne de décision, pas les catégories
+de ces projets. Plusieurs paramètres de simulation sont des hypothèses non sourcées (croissance, horizon, valeur
+résiduelle, bornes de dette et de garantie, centres ESG). Les 8 projets écartés pour un DSCR inférieur à 1 sont
+exactement les 8 projets \og faibles \fg{} de la simulation : ce résultat découle de la construction.
+
+\paragraph{Lien mécanique entre critères.} Le DSCR étant imposé, les flux sont proportionnels au service de la dette :
+un prêt court, au service annuel élevé, a mécaniquement des flux plus forts, donc une VAN plus élevée et un délai plus
+court. Comme les prêts courts sont aussi plus risqués pour le modèle, la probabilité de défaut est corrélée à la VAN et
+au délai. Ce lien passe par la tranche de durée, connue à l'octroi, et non par l'issue réelle, mais il est un artefact
+de la simulation.
+
+\paragraph{Représentativité du modèle.} Le modèle a appris sur des prêts américains garantis par un organisme public ;
+il ne représente pas directement un portefeuille bancaire marocain. Il sous-estime légèrement le risque de 2015-2016
+(3,52\,\% prédit pour 4,25\,\% observé) en raison de la dérive entre périodes, et manque une majorité des défauts au
+seuil F1.
+
+\paragraph{Paramètres de la méthode.} Les jugements AHP ont été initialisés à partir des poids cibles : l'AHP en
+vérifie surtout la cohérence, et devrait être rempli par des experts du crédit. Les seuils $q$, $p$, $v$ et certains
+profils sont relatifs au lot : ajouter un projet peut les déplacer. Le classement ELECTRE III affiché est un ordre total
+de lecture, qui résume les incomparabilités (signalées par les \og positions ambiguës \fg{}).
+
+\paragraph{Agents fondés sur un LLM.} Le vérificateur contrôle les nombres et les noms de méthodes, pas le sens des
+phrases : une explication peut rester approximative et demande une relecture humaine. L'offre gratuite de Gemini est
+souvent saturée, ce qui allonge les réponses ; l'application reste utilisable sans LLM.
+
+% ---------------------------------------------------------------------------------------------
+\section{Écarts au cahier des charges}
+
+\begin{itemize}
+  \item \textbf{Agent extracteur} : non réalisé, nos dossiers étant des données structurées ; l'import de fichiers et
+        le calcul automatique du risque en tiennent lieu.
+  \item \textbf{TRI} : non calculé ; la VAN et le délai de récupération couvrent la rentabilité et la liquidité.
+  \item \textbf{Durée du prêt} : remplacée par trois tranches à cause de la fuite détectée.
+  \item \textbf{Seuil du filtre} : fondé sur le taux de défaut de validation plutôt que d'entraînement.
+  \item \textbf{Variable de garantie} : retirée du modèle de risque pour éviter un double comptage.
+\end{itemize}
+Chacun de ces écarts est motivé par la qualité des résultats ou la cohérence de la méthode et est documenté.
+
+% ---------------------------------------------------------------------------------------------
+\section{Perspectives}
+
+\begin{itemize}
+  \item Appliquer l'outil à de vrais dossiers de crédit (bilans, plans de financement) pour remplacer la simulation.
+  \item Réentraîner le modèle sur des données locales, ajouter des variables macroéconomiques et recalibrer
+        régulièrement pour suivre la dérive.
+  \item Faire remplir les comparaisons AHP par des analystes, et ajouter le TRI et une détection d'anomalies.
+  \item Réaliser l'agent extracteur : un LLM qui lit des dossiers en PDF, remplit la matrice de performance en citant
+        ses sources, et la soumet à la validation des analystes.
+  \item Afficher le graphe de surclassement complet d'ELECTRE III et étendre l'arbitrage à plusieurs périodes.
+\end{itemize}

@@ -1,0 +1,88 @@
+% =============================================================================================
+\chapter{Introduction}\label{chap:intro}
+
+\section{Contexte}
+
+Une banque reçoit chaque année des demandes de crédit d'investissement émanant de petites et moyennes entreprises :
+un garage qui veut s'équiper, une clinique qui s'agrandit, un transporteur qui renouvelle sa flotte. La banque est le
+\emph{financeur} ; les projets appartiennent à des entités extérieures. Ses ressources sont limitées : un montant
+global est alloué sur une période donnée, chaque projet doit respecter des montants minimum et maximum, et la banque
+souhaite financer des projets variés plutôt que concentrer son risque sur un seul secteur.
+
+Pour chaque dossier, plusieurs dimensions comptent et se contredisent souvent. Un projet très rentable peut être
+risqué ; un projet sûr peut créer peu de valeur ou peu d'emplois ; un projet bien garanti peut être mal noté sur le
+plan environnemental. La décision est donc par nature \emph{multicritère}. Elle est aussi
+\emph{réglementée} : la banque doit pouvoir expliquer un refus et documenter son processus d'octroi, comme le
+rappellent les orientations de l'Autorité bancaire européenne sur l'octroi et le suivi des prêts~\cite{eba2020}.
+
+Le sujet proposé est de s'appuyer sur l'\emph{IA agentique} : des agents spécialisés analysent les dossiers,
+évaluent chaque critère et proposent un classement argumenté des projets, la décision finale restant aux décideurs
+de la banque. Le choix imposé est un modèle de classement en trois catégories : \og à financer \fg{},
+\og à financer si\dots{} \fg{} (sous conditions) et \og rejeté \fg{}.
+
+\section{Problématique}
+
+\begin{encadre}[Problématique]
+Comment combiner une estimation du risque de défaut apprise sur des données réelles, des critères financiers et
+extra-financiers et des contraintes de budget pour proposer, de façon transparente et vérifiable, un classement et
+une catégorie pour chaque projet, tout en utilisant des modèles de langage sans leur confier ni calcul ni décision ?
+\end{encadre}
+
+Trois difficultés structurent cette question. La première est \emph{statistique} : le défaut est rare (environ 4\,\%
+des prêts récents), les données mélangent des périodes de crise et de calme, et une variable peut contenir l'issue
+du prêt sans qu'on le voie (fuite de données). La deuxième est \emph{décisionnelle} : les critères sont hétérogènes
+(une probabilité, des montants, des ratios, un score) et une mauvaise note sur un critère essentiel ne doit pas être
+rachetée par de bonnes notes ailleurs. La troisième est \emph{de confiance} : un modèle de langage rédige bien mais
+peut inventer des chiffres, ce qui est inacceptable dans un dossier de crédit.
+
+\section{Objectifs}
+
+\begin{enumerate}
+  \item Construire une variable de défaut à cinq ans fiable à partir de prêts réels et ouverts (programme SBA 7(a)),
+        sans fuite d'information.
+  \item Comparer un modèle de référence simple et des modèles plus avancés, les calibrer, mesurer leurs
+        performances sur des années futures et expliquer leurs prédictions.
+  \item Évaluer un portefeuille de projets candidats sur huit critères par une méthode multicritère non
+        compensatoire (ELECTRE III et ELECTRE TRI), vérifiée par une seconde méthode (PROMETHEE II), avec des poids
+        cohérents (AHP) et un filtre éliminatoire.
+  \item Sélectionner les projets à financer sous un budget global, des bornes de montant et un plafond sectoriel.
+  \item Mesurer la robustesse des décisions aux paramètres de la méthode et aux données simulées.
+  \item Ajouter des agents fondés sur un modèle de langage qui rédigent et expliquent sans jamais calculer.
+  \item Livrer une solution déployée, réutilisable sur d'autres jeux de projets, reproductible et documentée.
+\end{enumerate}
+
+\section{Principe directeur}
+
+Le projet repose sur une séparation stricte des rôles, retenue dès la conception :
+
+\begin{encadre}[Qui fait quoi]
+\textbf{L'apprentissage automatique ne calcule que le risque.} \textbf{La méthode multicritère classe et catégorise.}
+\textbf{L'agent d'arbitrage respecte le budget.} \textbf{Le modèle de langage rédige et répond, il ne calcule jamais.}
+\textbf{Le comité d'investissement fixe les paramètres en amont et décide en aval.}
+\end{encadre}
+
+Cette séparation a deux avantages. Chaque composant peut être testé et justifié séparément, et chaque chiffre d'une
+recommandation peut être retracé jusqu'aux données et aux paramètres qui l'ont produit.
+
+\section{Contributions}
+
+\begin{itemize}
+  \item Un pipeline reproductible sur 910\,033 prêts SBA, avec un audit des données, une séparation temporelle et la
+        détection d'une fuite de données non documentée (la durée exacte du prêt).
+  \item Une comparaison de trois modèles qui chiffre le \emph{prix de l'interprétabilité} : 0,022 point d'AUROC entre
+        le meilleur modèle interprétable (EBM) et un modèle de boosting opaque (LightGBM).
+  \item Un moteur multicritère implémenté et testé à la main (AHP, filtre, ELECTRE III avec distillation, ELECTRE TRI,
+        PROMETHEE II, sensibilité sur 200 scénarios et 20 tirages de simulation).
+  \item Un agent d'arbitrage sous budget, avec deux règles de sélection comparées.
+  \item Deux agents fondés sur un modèle de langage, dont un conseiller qui appelle dix outils de calcul, avec un
+        vérificateur automatique des nombres et des noms de méthodes.
+  \item Une application Streamlit déployée et un moteur générique qui évalue n'importe quel jeu de projets.
+\end{itemize}
+
+\section{Plan du rapport}
+
+Le chapitre~\ref{chap:theorie} présente les fondements théoriques de toutes les méthodes utilisées. Le
+chapitre~\ref{chap:donnees} décrit les données, leur nettoyage et l'analyse exploratoire. Le
+chapitre~\ref{chap:methodo} expose l'architecture du système et la méthodologie. Le chapitre~\ref{chap:resultats}
+présente les résultats. Le chapitre~\ref{chap:solution} décrit la solution déployée. Le
+chapitre~\ref{chap:discussion} discute les choix, les limites et les perspectives, avant la conclusion.

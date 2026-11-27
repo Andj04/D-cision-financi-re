@@ -1,0 +1,19 @@
+\begin{table}[htbp]
+\centering
+\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Réglage des hyperparamètres sur la validation}\label{tab:hyper}
+\begin{tabular}{lllrc}
+\toprule
+Modèle & Hyperparamètres & AUROC val. (brut) & Durée (s) & Retenu \\
+\midrule
+Logistique & C=0.01 & 0,7348 & 20 & oui \\
+Logistique & C=0.1 & 0,7308 & 26 &  \\
+Logistique & C=1 & 0,7297 & 26 &  \\
+Logistique & C=10 & 0,7293 & 30 &  \\
+EBM & interactions=3, taux d'apprentissage=0.05 & 0,7676 & 191 &  \\
+EBM & interactions=10, taux d'apprentissage=0.05 & 0,7692 & 279 & oui \\
+LightGBM & feuilles=31, arbres=334 & 0,7933 & 18 &  \\
+LightGBM & feuilles=127, arbres=147 & 0,7959 & 17 & oui \\
+\bottomrule
+\end{tabular}
+\end{table}

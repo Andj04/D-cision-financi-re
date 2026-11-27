@@ -1,0 +1,34 @@
+% =============================================================================================
+\chapter*{Résumé}
+\addcontentsline{toc}{chapter}{Résumé}
+
+Une banque qui finance des projets d'investissement de PME doit arbitrer entre des critères contradictoires
+(risque, rentabilité, capacité de remboursement, garanties, impact environnemental et social) sous un budget
+limité. Ce projet construit un système d'aide à la décision dans lequel chaque composant a un rôle unique :
+\textbf{l'apprentissage automatique estime le risque, une méthode multicritère classe et catégorise, un agent
+d'arbitrage respecte le budget, un modèle de langage rédige et répond, et le comité d'investissement décide.}
+
+Le risque de défaut à cinq ans est appris sur 910\,033 prêts réels du programme américain SBA 7(a) (2000-2016),
+séparés dans le temps (entraînement 2000-2012, validation 2013-2014, test 2015-2016). Une fuite de données a été
+détectée et corrigée : la durée exacte du prêt est modifiée après un défaut. Trois modèles sont comparés sur les
+mêmes 13 variables : une régression logistique (AUROC de 0,726 sur le test), un modèle additif interprétable EBM
+(0,778) et un modèle de boosting LightGBM (0,800). La règle, fixée avant l'entraînement, retient le meilleur modèle
+\emph{interprétable} : l'EBM, calibré par régression isotonique. L'interprétabilité coûte ainsi 0,022 point d'AUROC.
+
+Quarante prêts du test, dont les indicateurs financiers sont simulés à partir des paramètres sectoriels de
+Damodaran, forment le portefeuille candidat. Les poids des huit critères sont obtenus par AHP (ratio de cohérence
+0,009) ; un filtre éliminatoire écarte 11 projets ; ELECTRE TRI affecte 9 projets à \og Financer \fg{}, 19 à
+\og Financer sous conditions \fg{} et 12 à \og Refuser \fg{} ; ELECTRE III et PROMETHEE II donnent des classements
+cohérents (Spearman 0,891). Un agent d'arbitrage sélectionne ensuite, sous un budget de 5\,M\$, 11 projets en
+respectant le classement, les montants admissibles et un plafond sectoriel de 35\,\%. Les analyses de sensibilité
+montrent que les décisions résistent aux paramètres de la méthode mais dépendent fortement de la simulation, ce qui
+est la principale limite de la démonstration.
+
+Le système est déployé dans une application Streamlit réutilisable : tout jeu de projets peut y être importé et
+évalué avec ses propres critères, poids, filtres et budget. Un agent rédacteur et un conseiller conversationnel,
+fondés sur Gemini, n'effectuent aucun calcul : ils appellent des fonctions Python déterministes et chaque nombre de
+leurs réponses est vérifié automatiquement.
+
+\medskip
+\noindent\textbf{Mots-clés :} risque de crédit, probabilité de défaut, EBM, LightGBM, calibration, fuite de données,
+aide multicritère à la décision, AHP, ELECTRE III, ELECTRE TRI, PROMETHEE II, sac à dos, agents LLM, Streamlit.

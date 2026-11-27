@@ -1,0 +1,24 @@
+\begin{table}[htbp]
+\centering
+\footnotesize\setlength{\tabcolsep}{4pt}
+\caption{Importance des variables sur la validation : permutation pour l'EBM, valeurs SHAP pour LightGBM}\label{tab:importance}
+\begin{tabular}{lccc}
+\toprule
+Variable & Baisse d'AUROC (EBM) & Écart-type & $|$SHAP$|$ moyen (LightGBM) \\
+\midrule
+tranche de durée & 0,1887 & 0,0080 & 0,723 \\
+taux d'intérêt initial & 0,0295 & 0,0027 & 0,809 \\
+montant (log) & 0,0270 & 0,0038 & 0,146 \\
+ligne renouvelable & 0,0229 & 0,0017 & 0,069 \\
+procédure SBA & 0,0170 & 0,0007 & 0,150 \\
+État & 0,0116 & 0,0022 & 0,208 \\
+taux fixe ou variable & 0,0088 & 0,0011 & 0,100 \\
+secteur NAICS & 0,0084 & 0,0013 & 0,174 \\
+part garantie SBA & 0,0028 & 0,0009 & 0,076 \\
+type d'entreprise & 0,0005 & 0,0005 & 0,022 \\
+franchise & 0,0001 & 0,0002 & 0,004 \\
+taux non renseigné & 0,0000 & 0,0000 & 0,164 \\
+âge de l'entreprise & -0,0002 & 0,0011 & 0,120 \\
+\bottomrule
+\end{tabular}
+\end{table}

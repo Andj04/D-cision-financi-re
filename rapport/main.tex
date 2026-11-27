@@ -1,0 +1,145 @@
+% =============================================================================================
+% Rapport du projet de machine learning
+% IA agentique pour la décision d'investissement multicritère
+% École Centrale Casablanca, 2026
+% Compilation : pdflatex main ; bibtex main ; pdflatex main ; pdflatex main   (ou latexmk -pdf main)
+% Compatible Overleaf (compilateur pdfLaTeX).
+% =============================================================================================
+\documentclass[11pt,a4paper]{report}
+
+% ---------------------------------------------------------------- encodage, langue, police
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[french]{babel}
+\usepackage{microtype}
+
+% ---------------------------------------------------------------- mise en page
+\usepackage[a4paper,top=2.5cm,bottom=2.5cm,left=2.5cm,right=2.5cm,headheight=14pt]{geometry}
+\usepackage{setspace}
+\setstretch{1.12}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt}
+
+% ---------------------------------------------------------------- figures, tableaux, couleurs
+\usepackage{graphicx}
+\graphicspath{{figures/}}
+\usepackage{booktabs,longtable,array,tabularx,multirow}
+\usepackage{float}
+\usepackage[font=small,labelfont=bf,labelsep=period]{caption}
+\usepackage{subcaption}
+\usepackage[table]{xcolor}
+\definecolor{eccvert}{HTML}{02987D}
+\definecolor{eccgris}{HTML}{72777A}
+\definecolor{eccfonce}{HTML}{2B3134}
+\definecolor{eccclair}{HTML}{E3F3EF}
+\definecolor{ambre}{HTML}{D39B2A}
+\definecolor{rouge}{HTML}{C0503F}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit,calc,backgrounds}
+
+% ---------------------------------------------------------------- mathématiques
+\usepackage{amsmath,amssymb,amsthm,bm}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+
+% ---------------------------------------------------------------- encadrés, code, liens
+\usepackage[most]{tcolorbox}
+\newtcolorbox{encadre}[1][]{colback=eccclair,colframe=eccvert,boxrule=0.6pt,arc=2pt,left=6pt,right=6pt,
+  top=4pt,bottom=4pt,fonttitle=\bfseries\small,title={#1}}
+\newtcolorbox{definition}[1][]{colback=white,colframe=eccgris,boxrule=0.5pt,arc=2pt,left=6pt,right=6pt,
+  top=3pt,bottom=3pt,fonttitle=\bfseries\small,coltitle=eccfonce,colbacktitle=eccclair,title={#1}}
+\usepackage{listings}
+\lstset{basicstyle=\ttfamily\small,breaklines=true,frame=single,rulecolor=\color{eccgris},
+  backgroundcolor=\color{eccclair!40},columns=fullflexible,keepspaces=true}
+\usepackage[hidelinks]{hyperref}
+\hypersetup{colorlinks=true,linkcolor=eccfonce,citecolor=eccvert,urlcolor=eccvert,
+  pdftitle={IA agentique pour la décision d'investissement multicritère},
+  pdfauthor={Mathieu, Adingra, Serge, Sarah}}
+\usepackage{url}
+
+% ---------------------------------------------------------------- titres et en-têtes
+\titleformat{\chapter}[display]{\normalfont\huge\bfseries\color{eccfonce}}
+  {\large\color{eccvert}\MakeUppercase{\chaptertitlename}~\thechapter}{6pt}{\Huge}
+\titlespacing*{\chapter}{0pt}{-10pt}{24pt}
+\titleformat{\section}{\normalfont\Large\bfseries\color{eccfonce}}{\color{eccvert}\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalfont\large\bfseries\color{eccfonce}}{\color{eccvert}\thesubsection}{0.8em}{}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{eccgris}IA agentique pour la décision d'investissement}
+\fancyhead[R]{\small\color{eccgris}\leftmark}
+\fancyfoot[C]{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{eccvert}\leaders\hrule height \headrulewidth\hfill}}
+\fancypagestyle{plain}{\fancyhf{}\fancyfoot[C]{\small\thepage}\renewcommand{\headrulewidth}{0pt}}
+
+% ---------------------------------------------------------------- raccourcis
+\newcommand{\pd}{\ensuremath{\mathrm{PD}}}
+\newcommand{\code}[1]{\texttt{#1}}
+\newcommand{\dollar}{\$}
+
+\begin{document}
+
+% =============================================================================================
+% PAGE DE GARDE
+% =============================================================================================
+\begin{titlepage}
+  \begin{center}
+    \includegraphics[width=0.36\textwidth]{logo-ecc.png}\\[0.6cm]
+    {\large\color{eccgris}\textsc{École Centrale Casablanca}}\\[0.2cm]
+    {\color{eccgris}Projet de machine learning}\\[2.2cm]
+    {\color{eccvert}\rule{\linewidth}{1.2pt}}\\[0.5cm]
+    {\Huge\bfseries\color{eccfonce} IA agentique pour la décision\\[0.25cm] d'investissement multicritère}\\[0.5cm]
+    {\Large\color{eccfonce} Évaluation et sélection de projets d'investissement}\\[0.4cm]
+    {\color{eccvert}\rule{\linewidth}{1.2pt}}\\[1.6cm]
+    {\large Risque de crédit par apprentissage automatique, décision par ELECTRE III / TRI\\
+    et PROMETHEE II, arbitrage sous budget, agents fondés sur un modèle de langage}\\[2.4cm]
+    \begin{tabular}{rl}
+      \textbf{Équipe} & Mathieu \quad Adingra \quad Serge \quad Sarah\\[0.25cm]
+      \textbf{Encadrant} & \textit{à compléter}\\[0.25cm]
+      \textbf{Dépôt} & \url{https://github.com/Andj04/D-cision-financi-re}\\
+    \end{tabular}
+    \par\vfill
+    {\large Novembre 2026}
+  \end{center}
+\end{titlepage}
+
+% =============================================================================================
+% PAGES LIMINAIRES
+% =============================================================================================
+\pagenumbering{roman}
+\input{chapitres/00_resume}
+\tableofcontents
+\listoffigures
+\listoftables
+\input{chapitres/00_abreviations}
+\cleardoublepage
+\pagenumbering{arabic}
+
+% =============================================================================================
+% CORPS
+% =============================================================================================
+\input{chapitres/01_introduction}
+\input{chapitres/02_theorie}
+\input{chapitres/03_donnees}
+\input{chapitres/04_methodologie}
+\input{chapitres/05_resultats}
+\input{chapitres/06_solution}
+\input{chapitres/07_discussion}
+\input{chapitres/08_conclusion}
+
+% =============================================================================================
+% BIBLIOGRAPHIE ET ANNEXES
+% =============================================================================================
+\cleardoublepage
+\phantomsection
+\addcontentsline{toc}{chapter}{Bibliographie}
+\bibliographystyle{plain}
+\bibliography{references}
+
+\appendix
+\input{chapitres/09_annexes}
+
+\end{document}

@@ -1,0 +1,409 @@
+% =============================================================================================
+\chapter{Fondements théoriques}\label{chap:theorie}
+
+Ce chapitre présente les concepts, méthodes et algorithmes utilisés, dans l'ordre de la chaîne de décision :
+le risque de crédit et les indicateurs financiers, l'apprentissage supervisé et son évaluation, l'interprétabilité,
+l'aide multicritère à la décision, la sélection sous budget et les agents fondés sur des modèles de langage.
+
+% ---------------------------------------------------------------------------------------------
+\section{Risque de crédit}
+
+\subsection{Défaut et probabilité de défaut}
+
+Un emprunteur fait \emph{défaut} lorsqu'il ne rembourse pas sa dette et que la banque constate une perte. Dans les
+données de la SBA, un prêt passé en perte porte le statut \code{CHGOFF} (\textit{charged off}). La \emph{probabilité de
+défaut} (PD) est la probabilité qu'un emprunteur fasse défaut sur un horizon donné. Avec la perte en cas de défaut
+et l'exposition, elle compose la perte attendue, au cœur de la gestion du risque de crédit et de la réglementation
+bâloise~\cite{bcbs2006}.
+
+\begin{definition}[Variable cible]
+Pour chaque prêt $i$, on définit $y_i = 1$ si le prêt est passé en perte au plus 60 mois après son premier
+versement, et $y_i = 0$ sinon. L'horizon de cinq ans correspond à celui d'un crédit d'investissement.
+\end{definition}
+
+\subsection{Scoring de crédit}
+
+Le \emph{scoring} attribue à chaque demande un score de risque à partir de caractéristiques connues au moment de la
+demande~\cite{thomas2002}. On attend du score deux qualités distinctes : bien \emph{ordonner} les emprunteurs du plus
+sûr au plus risqué (discrimination), et donner des probabilités \emph{fiables} au sens où, parmi les emprunteurs à
+qui l'on attribue 5\,\%, environ 5\,\% font défaut (calibration). Dans notre système, la seconde qualité est aussi
+importante que la première, car la méthode multicritère et le filtre éliminatoire utilisent la valeur de la
+probabilité, pas seulement le rang.
+
+% ---------------------------------------------------------------------------------------------
+\section{Indicateurs financiers d'un projet}\label{sec:indicateurs}
+
+\subsection{Valeur actuelle nette}
+
+Un projet nécessite un investissement initial $I_0$ et génère des flux de trésorerie $F_t$ aux années
+$t = 1, \dots, T$. Un dirham reçu dans le futur vaut moins qu'un dirham aujourd'hui : on \emph{actualise} les flux au
+taux $r$, égal au coût du capital du secteur. La valeur actuelle nette est
+\begin{equation}
+  \mathrm{VAN} = -I_0 + \sum_{t=1}^{T} \frac{F_t}{(1+r)^t} + \frac{V_T}{(1+r)^T},
+\end{equation}
+où $V_T$ est la valeur résiduelle du projet après l'horizon explicite. Une VAN positive signifie que le projet crée
+de la valeur au-delà de la rémunération exigée par les apporteurs de capitaux. Le taux de rendement interne (TRI) est
+le taux $r$ qui annule la VAN.
+
+\subsection{Délai de récupération}
+
+Le délai de récupération est le nombre d'années nécessaires pour que les flux cumulés remboursent
+l'investissement :
+\begin{equation}
+  D = \min \Big\{ \tau : \sum_{t=1}^{\tau} F_t \geq I_0 \Big\},
+\end{equation}
+interpolé linéairement à l'intérieur de l'année de récupération. C'est une mesure de liquidité et de risque : plus
+il est court, plus la banque est vite exposée à un projet qui a déjà remboursé sa mise.
+
+\subsection{Ratio de couverture du service de la dette}
+
+Le DSCR rapporte le flux de trésorerie d'une année au service de la dette de cette année (intérêts et
+remboursement du capital) :
+\begin{equation}
+  \mathrm{DSCR}_t = \frac{F_t}{S_t}, \qquad S = K\,\frac{i}{1-(1+i)^{-n}},
+\end{equation}
+où $S$ est l'annuité constante d'un prêt de montant $K$ au taux $i$ sur $n$ années. Un DSCR inférieur à 1 signifie
+que le projet ne génère pas assez de trésorerie pour payer ses échéances. On retient le minimum sur la durée du
+prêt, $\mathrm{DSCR}_{\min} = \min_t \mathrm{DSCR}_t$, qui décrit l'année la plus tendue. Les financements de
+projets d'énergie renouvelable exigent typiquement un DSCR de 1,25 à 1,40~\cite{nrel2024}.
+
+\subsection{Levier, garanties et critères extra-financiers}
+
+Le \emph{levier} rapporte la dette aux fonds propres apportés par les propriétaires : plus il est élevé, moins
+l'entreprise peut absorber une perte. La \emph{couverture par les garanties} rapporte la valeur des sûretés au
+montant prêté ; une couverture de 1 signifie que les garanties valent le prêt. Les orientations de
+l'ABE~\cite{eba2020} rappellent que la garantie est un second recours qui ne doit pas fonder la décision, d'où un
+poids modéré. Le \emph{score ESG} résume les risques environnementaux et sociaux ; les Principes de
+l'Équateur~\cite{equator2020} classent les projets en catégories A (impacts importants), B (limités) et C (minimes).
+Enfin, le nombre d'\emph{emplois soutenus par million investi} mesure l'impact économique local.
+
+% ---------------------------------------------------------------------------------------------
+\section{Apprentissage supervisé}
+
+On dispose de $n$ exemples $(\bm{x}_i, y_i)$, où $\bm{x}_i \in \mathbb{R}^d$ décrit le prêt et $y_i \in \{0,1\}$
+son issue. On cherche une fonction $\hat p(\bm{x}) \approx \Pr(y = 1 \mid \bm{x})$ qui se généralise à des prêts
+futurs.
+
+\subsection{Régression logistique}
+
+La régression logistique modélise le logarithme de la cote par une combinaison linéaire des variables :
+\begin{equation}
+  \log \frac{\hat p(\bm{x})}{1-\hat p(\bm{x})} = \beta_0 + \bm{\beta}^\top \bm{x},
+  \qquad \hat p(\bm{x}) = \frac{1}{1+e^{-(\beta_0 + \bm{\beta}^\top \bm{x})}}.
+\end{equation}
+Les coefficients minimisent la log-vraisemblance négative régularisée :
+\begin{equation}
+  \min_{\beta_0,\bm{\beta}} \; -\sum_{i=1}^{n} \Big[ y_i \log \hat p(\bm{x}_i) + (1-y_i)\log\big(1-\hat p(\bm{x}_i)\big) \Big]
+  + \frac{1}{2C}\,\|\bm{\beta}\|_2^2 .
+\end{equation}
+Le paramètre $C$ règle la force de la régularisation (plus $C$ est petit, plus les coefficients sont contraints). Les
+variables catégorielles sont codées en indicatrices (\textit{one-hot}) et les variables numériques standardisées.
+Simple, stable et lisible, c'est le modèle de référence (\textit{baseline}) du scoring de crédit~\cite{thomas2002}.
+Sa limite est de ne capter ni non-linéarité ni interaction sans ingénierie manuelle.
+
+\subsection{Modèles additifs généralisés et EBM}
+
+Un modèle additif généralisé (GAM) remplace chaque terme linéaire par une fonction quelconque d'une variable :
+\begin{equation}
+  g\big(\mathbb{E}[y \mid \bm{x}]\big) = \beta_0 + \sum_{j=1}^{d} f_j(x_j) + \sum_{(j,k) \in \mathcal{I}} f_{jk}(x_j, x_k),
+\end{equation}
+où $g$ est la fonction logit et $\mathcal{I}$ un petit ensemble de paires de variables en interaction (modèle
+GA$^2$M~\cite{lou2013}). L'\emph{Explainable Boosting Machine} (EBM) de la bibliothèque InterpretML~\cite{nori2019}
+apprend chaque fonction $f_j$ par \emph{boosting cyclique} : à chaque tour, elle ajuste un arbre très peu profond sur
+une seule variable à la fois, avec un faible taux d'apprentissage, en tournant sur toutes les variables. Les
+interactions les plus utiles sont ensuite détectées et ajoutées. L'ensemble est moyenné sur plusieurs
+rééchantillonnages (\textit{outer bags}).
+
+Le modèle obtenu est aussi précis que de nombreux modèles opaques, tout en restant une \emph{boîte de verre} : la
+prédiction est la somme de contributions lisibles, et chaque fonction $f_j$ peut être tracée pour montrer comment le
+risque varie avec la variable. C'est la propriété qui motive son choix pour une décision de crédit.
+
+\subsection{Boosting de gradient et LightGBM}
+
+Le boosting de gradient~\cite{friedman2001} construit un modèle additif d'arbres
+$F_M(\bm{x}) = \sum_{m=1}^{M} \nu\, h_m(\bm{x})$ : chaque nouvel arbre $h_m$ est ajusté sur le gradient négatif de
+la fonction de perte (ici la perte logistique) par rapport à la prédiction courante, et $\nu$ est le taux
+d'apprentissage. LightGBM~\cite{ke2017} est une implémentation très efficace : il discrétise les variables en
+histogrammes, fait croître les arbres feuille par feuille (la feuille qui réduit le plus la perte d'abord), traite
+nativement les variables catégorielles et propose des techniques d'échantillonnage des observations (GOSS) et de
+regroupement de variables (EFB). Ses hyperparamètres principaux sont le nombre de feuilles, le taux d'apprentissage
+et le nombre d'arbres, ce dernier étant fixé par \emph{arrêt anticipé} : on arrête d'ajouter des arbres quand la
+performance sur un jeu de validation cesse de s'améliorer. Très performant sur les données tabulaires, ce modèle
+est en revanche opaque : des centaines d'arbres en interaction ne se lisent pas.
+
+% ---------------------------------------------------------------------------------------------
+\section{Évaluation d'un classifieur probabiliste}
+
+\subsection{Matrice de confusion, précision, rappel et F1}
+
+Pour un seuil $s$, on prédit un défaut quand $\hat p(\bm{x}) \geq s$. On compte les vrais positifs (VP), faux
+positifs (FP), faux négatifs (FN) et vrais négatifs (VN). La précision $\mathrm{VP}/(\mathrm{VP}+\mathrm{FP})$ est la
+part des alertes justes, le rappel $\mathrm{VP}/(\mathrm{VP}+\mathrm{FN})$ la part des défauts détectés, et
+\begin{equation}
+  F_1 = \frac{2\,\text{précision}\times\text{rappel}}{\text{précision}+\text{rappel}} .
+\end{equation}
+Le F1 dépend du seuil : nous le choisissons sur la validation, là où le F1 est maximal, puis l'appliquons tel quel
+au test.
+
+\subsection{Courbes ROC et précision-rappel}
+
+La courbe ROC trace le taux de vrais positifs contre le taux de faux positifs pour tous les seuils. Son aire, l'AUROC,
+a une interprétation directe : c'est la probabilité qu'un emprunteur en défaut tiré au hasard reçoive un score plus
+élevé qu'un emprunteur sain tiré au hasard ; 0,5 correspond au hasard et 1 à un classement parfait. Quand la classe
+positive est rare, l'AUROC peut paraître élevée alors que les alertes sont peu précises : l'aire sous la courbe
+précision-rappel (AUPRC) est alors plus informative~\cite{davis2006}. Sa valeur de référence est le taux de défaut :
+un modèle au hasard obtient une AUPRC égale à la proportion de positifs.
+
+\subsection{Score de Brier et calibration}
+
+Le score de Brier~\cite{brier1950} mesure l'écart quadratique moyen entre la probabilité prédite et l'issue :
+\begin{equation}
+  \mathrm{BS} = \frac{1}{n} \sum_{i=1}^{n} \big(\hat p(\bm{x}_i) - y_i\big)^2 .
+\end{equation}
+Il récompense à la fois la discrimination et la calibration. Un modèle est \emph{calibré} si
+$\Pr(y=1 \mid \hat p = p) = p$ ; on le vérifie par une courbe de calibration qui compare, par tranche de probabilité
+prédite, la moyenne prédite et la fréquence observée.
+
+La \emph{calibration isotonique}~\cite{zadrozny2002,niculescu2005} corrige les probabilités par une fonction
+croissante $m$ ajustée sur un jeu distinct de celui de l'entraînement :
+\begin{equation}
+  \hat m = \argmin_{m \text{ croissante}} \sum_{i} \big(y_i - m(\hat p_i)\big)^2 ,
+\end{equation}
+résolu par l'algorithme \textit{pool adjacent violators}. Elle ne modifie pas l'ordre des prédictions (donc
+quasiment pas l'AUROC) mais corrige leur niveau. Elle est indispensable lorsque le taux de défaut de la période
+d'entraînement diffère de celui de la période d'usage, ce qui est notre cas.
+
+\subsection{Déséquilibre des classes}
+
+Avec 3 à 13\,\% de défauts selon les périodes, la classe positive est minoritaire. Nous n'avons pas rééquilibré
+les données (par sur- ou sous-échantillonnage), car cela fausserait les probabilités dont le MCDA a besoin. Nous
+avons préféré des métriques adaptées (AUPRC, Brier), un seuil de décision choisi sur la validation et une calibration.
+
+% ---------------------------------------------------------------------------------------------
+\section{Bonnes pratiques : séparation des données et fuites}
+
+\subsection{Séparation temporelle}
+
+Les données sont séparées en trois blocs \emph{avant tout prétraitement} : l'entraînement sert à apprendre, la
+validation à régler (hyperparamètres, calibration, seuil, choix du modèle) et le test à mesurer la performance
+finale, une seule fois. Une banque prédit l'avenir à partir du passé : la séparation suit donc l'année d'approbation
+du prêt, et non un tirage au hasard qui mélangerait des prêts de 2008 et de 2015 et donnerait des performances
+trop optimistes. Tout ce qui apprend quelque chose des données (médianes d'imputation, échelles, modalités
+connues) est ajusté sur l'entraînement uniquement.
+
+\subsection{Fuite de données}
+
+Une fuite survient lorsqu'une variable contient, directement ou indirectement, une information indisponible au
+moment de la prédiction~\cite{kaufman2012}. Le modèle paraît alors excellent mais échouera en usage. Les fuites
+évidentes (statut du prêt, date et montant de la perte) se suppriment à la source ; les fuites cachées se détectent
+par un résultat trop beau pour être vrai, puis par l'examen de la variable suspecte. Nous en avons trouvé une
+(section~\ref{sec:fuite}).
+
+% ---------------------------------------------------------------------------------------------
+\section{Interprétabilité}
+
+\subsection{Importance par permutation}
+
+L'importance d'une variable $j$ est la baisse de performance observée quand on mélange au hasard ses valeurs, ce qui
+casse son lien avec la cible tout en conservant sa distribution~\cite{breiman2001,fisher2019} :
+\begin{equation}
+  I_j = \mathrm{AUROC}(\hat p, X) - \frac{1}{K}\sum_{k=1}^{K} \mathrm{AUROC}\big(\hat p, X^{\pi_k(j)}\big),
+\end{equation}
+où $X^{\pi_k(j)}$ est le jeu de données dont la colonne $j$ a été permutée. La méthode s'applique à tout modèle.
+
+\subsection{Explications natives de l'EBM}
+
+L'EBM étant additif, l'importance d'un terme est la valeur absolue moyenne de sa contribution
+$\frac{1}{n}\sum_i |f_j(x_{ij})|$, et l'effet d'une variable se lit directement sur la courbe $f_j$. Pour un prêt
+donné, la prédiction se décompose exactement en contributions : on peut nommer les facteurs qui augmentent son risque.
+
+\subsection{Valeurs SHAP}
+
+Pour un modèle opaque, les valeurs SHAP~\cite{lundberg2017} attribuent à chaque variable une part de l'écart entre la
+prédiction et la prédiction moyenne, selon la valeur de Shapley de la théorie des jeux coopératifs :
+\begin{equation}
+  \phi_j(\bm{x}) = \sum_{S \subseteq \{1,\dots,d\}\setminus\{j\}}
+  \frac{|S|!\,(d-|S|-1)!}{d!}\Big[ v_{\bm{x}}(S\cup\{j\}) - v_{\bm{x}}(S) \Big],
+\end{equation}
+où $v_{\bm{x}}(S)$ est la prédiction attendue lorsque seules les variables de $S$ sont connues. Ces valeurs sont les
+seules à vérifier simultanément l'efficacité (elles somment à l'écart total), la symétrie et la nullité. Pour les
+modèles d'arbres, l'algorithme \textit{TreeSHAP} les calcule exactement en temps polynomial.
+
+% ---------------------------------------------------------------------------------------------
+\section{Aide multicritère à la décision}
+
+Une alternative $a$ (un projet) est évaluée sur $m$ critères $g_1(a), \dots, g_m(a)$, chacun à maximiser ou à
+minimiser, avec des poids $w_j$. Les méthodes \emph{compensatoires}, comme la somme pondérée, permettent qu'une
+mauvaise note soit rachetée par de bonnes notes ailleurs. Les méthodes de \emph{surclassement} de l'école
+européenne~\cite{roy1991,figueira2005} limitent cette compensation : une très mauvaise performance sur un critère
+peut opposer un \emph{veto}. Pour un dossier de crédit, cette propriété est essentielle : un DSCR très faible ne
+devrait pas être effacé par une VAN élevée.
+
+\subsection{Pondération par AHP}
+
+L'\textit{Analytic Hierarchy Process}~\cite{saaty1980} construit les poids à partir de comparaisons deux à deux. Pour
+chaque paire de critères $(i,j)$, le décideur indique l'importance relative $a_{ij}$ sur l'échelle de Saaty (1 :
+égale importance, 3 : modérée, 5 : forte, 7 : très forte, 9 : extrême, valeurs paires intermédiaires), avec
+$a_{ji} = 1/a_{ij}$. Huit critères demandent $8\times7/2 = 28$ jugements. Le vecteur des poids est le vecteur propre
+principal de la matrice $A = (a_{ij})$ :
+\begin{equation}
+  A\,\bm{w} = \lambda_{\max}\,\bm{w}, \qquad \sum_j w_j = 1 .
+\end{equation}
+Si les jugements étaient parfaitement cohérents ($a_{ik} = a_{ij}a_{jk}$), on aurait $\lambda_{\max} = m$. L'indice
+de cohérence $\mathrm{CI} = (\lambda_{\max}-m)/(m-1)$ est rapporté à un indice aléatoire $\mathrm{RI}$ ($1{,}41$ pour
+$m = 8$) : le ratio $\mathrm{CR} = \mathrm{CI}/\mathrm{RI}$ doit rester inférieur à 0,10.
+
+\subsection{ELECTRE III}
+
+ELECTRE III~\cite{roy1978} compare les alternatives deux à deux. Chaque critère $j$ reçoit trois seuils : un écart
+inférieur au seuil d'indifférence $q_j$ est négligeable, un écart supérieur au seuil de préférence $p_j$ est net, et
+un écart supérieur au seuil de veto $v_j$ est rédhibitoire. Pour des critères à maximiser, on note
+$\Delta_j = g_j(b) - g_j(a)$ l'avantage de $b$ sur $a$.
+
+\paragraph{Concordance.} Le critère $j$ soutient l'affirmation « $a$ surclasse $b$ » d'autant plus que $b$ ne fait
+pas nettement mieux :
+\begin{equation}
+  c_j(a,b) =
+  \begin{cases}
+    1 & \text{si } \Delta_j \leq q_j,\\[2pt]
+    \dfrac{p_j - \Delta_j}{p_j - q_j} & \text{si } q_j < \Delta_j < p_j,\\[6pt]
+    0 & \text{si } \Delta_j \geq p_j,
+  \end{cases}
+  \qquad
+  C(a,b) = \frac{\sum_j w_j\, c_j(a,b)}{\sum_j w_j}.
+\end{equation}
+
+\paragraph{Discordance.} Le critère $j$ s'oppose d'autant plus que $b$ fait beaucoup mieux :
+\begin{equation}
+  d_j(a,b) =
+  \begin{cases}
+    0 & \text{si } \Delta_j \leq p_j,\\[2pt]
+    \dfrac{\Delta_j - p_j}{v_j - p_j} & \text{si } p_j < \Delta_j < v_j,\\[6pt]
+    1 & \text{si } \Delta_j \geq v_j .
+  \end{cases}
+\end{equation}
+
+\paragraph{Crédibilité.} La concordance est atténuée par les critères dont la discordance la dépasse :
+\begin{equation}
+  \sigma(a,b) = C(a,b) \prod_{j \,:\, d_j(a,b) > C(a,b)} \frac{1 - d_j(a,b)}{1 - C(a,b)} .
+\end{equation}
+Un veto ($d_j = 1$) annule la crédibilité, quelle que soit la concordance : c'est la non-compensation.
+
+\paragraph{Distillation.} Le classement s'obtient en exploitant la matrice $\sigma$ par deux distillations.
+À chaque étape, on fixe un niveau $\lambda_k$ juste en dessous de la plus forte crédibilité restante, avec un seuil
+de discrimination $s(\lambda) = 0{,}30 - 0{,}15\,\lambda$, et l'on considère que $a$ surclasse $b$ si
+$\sigma(a,b) > \lambda_k$ et $\sigma(a,b) - \sigma(b,a) > s(\sigma(a,b))$. La qualification d'une alternative est
+le nombre d'alternatives qu'elle surclasse moins le nombre de celles qui la surclassent. La distillation
+\emph{descendante} extrait successivement les meilleures, l'\emph{ascendante} les moins bonnes. Les deux préordres
+peuvent différer : une alternative bien placée par l'une et mal placée par l'autre est \emph{incomparable} à une
+partie des autres, information propre aux méthodes de surclassement.
+
+\subsection{ELECTRE TRI}
+
+ELECTRE TRI~\cite{yu1992} affecte chaque alternative à une catégorie ordonnée, au lieu de la classer. Les catégories
+sont séparées par des \emph{profils limites} : $b_1$ entre Refuser et Conditionner, $b_2$ entre Conditionner et
+Financer. On calcule la crédibilité $\sigma(a, b_h)$ et $\sigma(b_h, a)$ comme dans ELECTRE III, puis on la
+compare à un niveau de \emph{coupure} $\lambda \in [0{,}5 ; 1]$ : $a$ surclasse $b_h$ si $\sigma(a,b_h) \geq \lambda$.
+
+\begin{itemize}
+  \item \textbf{Règle pessimiste} (prudente) : on compare $a$ aux profils du plus exigeant au moins exigeant, et on
+        l'affecte à la catégorie juste au-dessus du premier profil qu'il surclasse.
+  \item \textbf{Règle optimiste} : on compare $a$ aux profils du moins exigeant au plus exigeant, et on l'affecte à la
+        catégorie juste en dessous du premier profil qui lui est strictement préféré.
+\end{itemize}
+La règle pessimiste n'admet un projet dans une catégorie que s'il en franchit clairement le seuil d'entrée ; elle
+correspond à la prudence bancaire.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[x=1.3cm,y=0.62cm,font=\small]
+  \foreach \j/\lab in {1/PD,2/DSCR,3/VAN,4/Délai,5/Levier,6/Garanties,7/ESG,8/Emplois}{
+    \draw[eccgris!60] (\j,0) -- (\j,6);
+    \node[below,text=eccfonce] at (\j,0) {\lab};}
+  \fill[rouge!12] (0.6,0) rectangle (8.4,2);
+  \fill[ambre!14] (0.6,2) rectangle (8.4,4);
+  \fill[eccvert!12] (0.6,4) rectangle (8.4,6);
+  \foreach \j in {1,...,8}{\draw[eccgris!60] (\j,0) -- (\j,6);}
+  \draw[rouge,thick] (1,2.1) -- (2,1.8) -- (3,2.2) -- (4,1.9) -- (5,2.1) -- (6,1.8) -- (7,2.0) -- (8,2.2);
+  \draw[eccvert,thick] (1,4.0) -- (2,4.2) -- (3,3.8) -- (4,4.1) -- (5,3.9) -- (6,4.2) -- (7,4.0) -- (8,3.9);
+  \draw[eccfonce,thick,dashed,mark=*,mark options={solid,fill=eccfonce}] plot coordinates
+    {(1,4.8) (2,3.1) (3,1.2) (4,1.5) (5,4.6) (6,3.3) (7,5.2) (8,2.9)};
+  \node[right,text=rouge] at (8.45,2.1) {profil $b_1$};
+  \node[right,text=eccvert] at (8.45,4.0) {profil $b_2$};
+  \node[right,text=eccfonce] at (8.45,5.4) {projet $a$};
+  \node[left,text=eccvert] at (0.55,5) {Financer};
+  \node[left,text=ambre] at (0.55,3) {Conditionner};
+  \node[left,text=rouge] at (0.55,1) {Refuser};
+\end{tikzpicture}
+\caption{Principe d'ELECTRE TRI : chaque critère (axe vertical, \og meilleur \fg{} vers le haut) est découpé par les
+profils $b_1$ et $b_2$. Le projet $a$ est comparé globalement à chaque profil par la crédibilité $\sigma$, et non
+critère par critère.}
+\label{fig:electretri}
+\end{figure}
+
+\subsection{PROMETHEE II}
+
+PROMETHEE~\cite{brans1985} associe à chaque critère une fonction de préférence $P_j(a,b) \in [0,1]$ croissante avec
+l'écart $\delta_j = g_j(a) - g_j(b)$. Nous utilisons la fonction linéaire avec zone d'indifférence :
+$P_j = 0$ si $\delta_j \leq q_j$, $P_j = 1$ si $\delta_j \geq p_j$ et
+$P_j = (\delta_j - q_j)/(p_j - q_j)$ entre les deux. L'indice de préférence agrégé et les flux sont
+\begin{equation}
+  \pi(a,b) = \sum_j w_j P_j(a,b), \qquad
+  \phi^+(a) = \frac{1}{n-1}\sum_{b\neq a}\pi(a,b), \qquad
+  \phi^-(a) = \frac{1}{n-1}\sum_{b\neq a}\pi(b,a),
+\end{equation}
+et PROMETHEE II classe les alternatives par flux net décroissant $\phi(a) = \phi^+(a) - \phi^-(a)$. La méthode ne
+comporte pas de veto : nous l'utilisons pour vérifier que le classement ne dépend pas de la méthode choisie.
+
+\subsection{Comparer deux classements}
+
+La concordance entre deux classements de $n$ alternatives se mesure par le coefficient de Spearman,
+$\rho = 1 - \frac{6\sum_i d_i^2}{n(n^2-1)}$ où $d_i$ est l'écart de rang de l'alternative $i$, et par le $\tau$ de
+Kendall, qui compte la proportion de paires classées dans le même ordre moins la proportion de paires inversées.
+Les deux valent 1 pour des classements identiques et 0 en l'absence de lien.
+
+% ---------------------------------------------------------------------------------------------
+\section{Sélection sous budget}\label{sec:theorie-budget}
+
+Choisir quels projets financer sous un budget $B$ est un \emph{problème du sac à dos}~\cite{martello1990}. Chaque
+projet $i$ demande un montant $a_i$ et apporte une valeur $v_i$ ; la variable $x_i \in \{0,1\}$ indique s'il est
+retenu :
+\begin{equation}
+  \max_{\bm{x}\in\{0,1\}^n} \sum_i v_i\,x_i
+  \quad\text{s.c.}\quad \sum_i a_i\,x_i \leq B,
+  \quad \sum_{i \in s} a_i\,x_i \leq \alpha B \;\; \forall s \in \mathcal{S},
+  \quad x_i = 0 \text{ si } a_i \notin [a_{\min}, a_{\max}],
+\end{equation}
+où $\mathcal{S}$ est l'ensemble des secteurs et $\alpha$ la part maximale d'un secteur. Ce programme linéaire en
+nombres entiers est NP-difficile en général, mais se résout exactement pour quelques centaines de projets par
+séparation et évaluation (\textit{branch and bound}) ; nous utilisons le solveur HiGHS~\cite{huangfu2018}.
+
+Le choix des valeurs $v_i$ détermine la politique de sélection. Si l'on veut qu'un projet mieux classé passe
+\emph{toujours} avant tous les projets moins bien classés, on donne des poids lexicographiques
+($v_i > \sum_{k \text{ moins bien classé}} v_k$). Le problème se résout alors exactement de façon gloutonne :
+on parcourt les projets dans l'ordre du classement et l'on retient chacun s'il respecte encore les contraintes.
+
+% ---------------------------------------------------------------------------------------------
+\section{Modèles de langage et agents}
+
+\subsection{Grands modèles de langage}
+
+Un grand modèle de langage (LLM) est un réseau de neurones de type \textit{transformer}, entraîné sur de très
+grands corpus à prédire le mot suivant, puis ajusté pour suivre des instructions. Il rédige, résume et explique avec
+aisance. Il peut aussi produire des affirmations fausses formulées avec assurance (\emph{hallucinations}),
+y compris des chiffres inventés~\cite{ji2023}. Les LLM calculent mal et de façon non reproductible : ils ne doivent
+pas produire les nombres d'une décision de crédit.
+
+\subsection{Agents et appel d'outils}
+
+Un \emph{agent} est un programme qui utilise un LLM pour accomplir une tâche en plusieurs étapes, en raisonnant et
+en agissant sur son environnement~\cite{yao2023}. L'\emph{appel d'outils} (\textit{function calling}) permet au LLM
+de demander l'exécution de fonctions décrites par un schéma (nom, rôle, paramètres), puis de rédiger à partir de
+leurs résultats~\cite{schick2023}. Le calcul reste ainsi dans du code déterministe et vérifiable, et le LLM se limite
+au langage : comprendre une question, choisir les bons outils, reformuler les résultats.
+
+\subsection{Garde-fous}
+
+Trois garde-fous complètent ce schéma. Le LLM ne reçoit que des données déjà calculées ou n'y accède que par des
+outils. Un vérificateur extrait les nombres de sa réponse et contrôle qu'ils figurent dans les données consultées.
+Enfin, la décision reste humaine : l'agent conseille, le comité décide.

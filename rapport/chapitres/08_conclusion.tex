@@ -1,0 +1,24 @@
+% =============================================================================================
+\chapter{Conclusion}\label{chap:conclusion}
+
+Ce projet a construit un système d'aide à la décision d'investissement dans lequel chaque composant a un rôle unique et
+vérifiable. Le risque de défaut est appris sur 910\,033 prêts réels, avec une séparation temporelle stricte et la
+correction d'une fuite de données qui aurait gonflé artificiellement les performances. Parmi trois modèles, le modèle
+interprétable EBM est retenu ; il atteint une AUROC de 0,778 sur des années futures, à 0,022 point d'un modèle opaque,
+ce qui montre que l'exigence d'explicabilité d'une décision de crédit a ici un coût faible.
+
+La décision repose sur une méthode multicritère non compensatoire. Avec des poids cohérents, un filtre éliminatoire et
+des profils fondés sur des repères bancaires, ELECTRE TRI répartit les 40 projets en 9 à financer, 19 sous conditions et
+12 refusés, ELECTRE III et PROMETHEE II s'accordent sur le classement, et les décisions de financement résistent aux
+variations des paramètres de la méthode. Un agent d'arbitrage transforme ces catégories en une sélection qui respecte
+le budget, les montants admissibles et la diversification sectorielle, et la comparaison de deux règles montre que le
+choix de l'objectif d'optimisation est une décision de politique, pas un détail technique.
+
+Les modèles de langage sont utilisés là où ils sont utiles et sûrs : rédiger une note et répondre à des questions,
+sans jamais calculer, en appelant des fonctions déterministes dont chaque nombre est vérifié. Le système est déployé
+dans une application réutilisable, testée et reproductible, qui peut évaluer n'importe quel jeu de projets.
+
+La principale limite est connue et mesurée : les indicateurs financiers de la démonstration sont simulés, et les
+catégories des projets en dépendent fortement. La prochaine étape naturelle est donc d'appliquer cet outil à de vrais
+dossiers. Dans tous les cas, le système éclaire la décision sans la prendre : la décision finale reste celle du comité
+d'investissement.

@@ -1,0 +1,59 @@
+% =============================================================================================
+\chapter{Paramètres de la méthode}\label{ann:parametres}
+
+\input{tables/tab_ahp}
+
+\input{tables/tab_damodaran}
+
+\chapter{Les 40 projets de démonstration}\label{ann:projets}
+
+Les noms sont fictifs : l'activité vient du vrai code NAICS du prêt, le nom de famille d'une liste fixe. E-III et P-II
+sont les rangs ELECTRE III et PROMETHEE II (\og -- \fg{} pour un projet écarté par le filtre) ; PD est la probabilité
+de défaut estimée par l'EBM ; la dernière colonne indique si le projet est retenu par l'arbitrage sous budget
+(5\,M\$, 20\,000\,\$ à 2\,M\$ par projet, 35\,\% au plus par secteur).
+
+\input{tables/tab_projets}
+
+\chapter{Reproduction}\label{ann:reproduction}
+
+\section{Structure du dépôt}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Structure du dépôt GitHub}\label{tab:depot}
+\begin{tabularx}{\textwidth}{>{\ttfamily}p{3.6cm}X}
+\toprule
+\normalfont Dossier & Contenu \\
+\midrule
+data/ & données brutes et intermédiaires (non versionnées) et petits fichiers de résultats \\
+src/ & pipeline (préparation, modèles, interprétabilité, simulation, MCDA, arbitrage), moteur générique, agents \\
+app/ & application Streamlit (une page par fichier, logo, thème) \\
+notebooks/ & audit et exploration, régression logistique, comparaison des modèles, interprétabilité \\
+models/, reports/, params/ & modèle entraîné, métriques et figures, paramètres (AHP, profils, filtre, arbitrage) \\
+exemples/ & jeux de test de l'outil réutilisable et leurs configurations \\
+tests/ & 30 tests automatiques \\
+rapport/ & ce rapport (LaTeX), ses figures et ses tableaux générés \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\section{Commandes}
+
+\begin{lstlisting}
+pip install -r requirements.txt -r requirements-dev.txt
+python scripts/download_data.py        # verifie les donnees et donne les liens
+cd src
+python data_prep.py                    # cible default_60m, separation temporelle
+python models.py                       # logistique, EBM, LightGBM, calibration
+python export_pd.py                    # probabilite de defaut du test
+python eda.py                          # figures d'analyse exploratoire
+python simulate.py                     # 40 projets, indicateurs simules
+python project_scores.py               # table des 8 criteres
+python interpret_model.py              # permutation, effets EBM, SHAP
+python run_mcda.py                     # AHP, filtre, ELECTRE, PROMETHEE, arbitrage
+python sensibilite_simulation.py       # 20 tirages de simulation
+python rapport_assets.py               # figures et tableaux du rapport
+cd ..
+python -m pytest tests -q
+streamlit run app/app.py
+\end{lstlisting}

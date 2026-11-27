@@ -20,6 +20,7 @@ Projet de machine learning de groupe dans le secteur bancaire. La banque est le 
 | `params/` | Paramètres sectoriels utilisés, **jugements AHP (modifiables)**, matrice et poids AHP, profils ELECTRE TRI, filtre éliminatoire. |
 | `tests/` | `test_mcda.py` (exemple à 3 projets calculé à la main, AHP, filtre, profils), `test_pipeline.py` (garde-fous fuite / double comptage), `test_engine.py` (moteur générique, configuration, outils du conseiller, vérificateur, noms), `test_arbitrage.py` (budget, bornes, plafond sectoriel), `check_agent.py` (garde-fou de l'agent). |
 | `scripts/download_data.py` | Vérifie la présence des données et indique où les obtenir. |
+| `rapport/` | Rapport LaTeX (`main.tex`, un fichier par chapitre dans `chapitres/`, `references.bib`) ; figures et tableaux générés par `python src/rapport_assets.py` depuis les résultats (aucun chiffre recopié à la main). Compilation : Overleaf, pdfLaTeX (importer `rapport_overleaf.zip`, recréé par `rapport_assets.py`). |
 
 ## Installation et reproduction
 
